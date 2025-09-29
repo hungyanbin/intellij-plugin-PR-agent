@@ -1,5 +1,6 @@
 package com.github.hungyanbin.intellijpluginpragent.toolWindow
 
+import com.github.hungyanbin.intellijpluginpragent.repository.SecretRepository
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
@@ -35,6 +36,7 @@ class MyToolWindowFactory : ToolWindowFactory {
         private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         private val anthropicAPIService = AnthropicAPIService()
         private val gitCommandHelper = GitCommandHelper(project.basePath!!)
+        private val secretRepository = SecretRepository()
         private val configPanel = ConfigPanel()
         private val gitPanel = GitPanel(project)
 
@@ -72,10 +74,10 @@ class MyToolWindowFactory : ToolWindowFactory {
         }
 
         private fun generatePRNotes() {
-            val apiKey = configPanel.getApiKey()
+            val apiKey = secretRepository.getAnthropicApiKey() ?: ""
 
             if (apiKey.isEmpty()) {
-                prNotesArea.text = "Error: Please enter your Anthropic API key in the Config tab"
+                prNotesArea.text = "Error: Please enter and apply your Anthropic API key in the Config tab"
                 return
             }
 
