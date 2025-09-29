@@ -7,11 +7,8 @@ class GitCommandHelper(
 ) {
 
     suspend fun getBranchHistory(): BranchHistory {
-        println("projectPath: $projectPath")
         val currentBranch = getCurrentBranch()
-        println("currentBranch: $currentBranch")
         val parentBranch = getParentBranch(currentBranch)
-        println("parentBranch: $parentBranch")
         val commits = getCommitsSinceParent(currentBranch, parentBranch)
 
         return BranchHistory(
@@ -45,10 +42,8 @@ class GitCommandHelper(
             // Parse the log output to find branch references
             for (line in lines) {
                 // Look for branch names in parentheses, excluding origin/ and HEAD
-                println("line: $line")
                 val branchMatch = Regex("\\(([^,)]+)\\)").findAll(line)
                 for (match in branchMatch) {
-                    println("match: $match")
                     val branchRef = match.groupValues[1]
                     if (!branchRef.contains("HEAD") &&
                         !branchRef.contains("origin/") &&

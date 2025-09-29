@@ -15,18 +15,26 @@ class AnthropicAPIService {
     )
 
     suspend fun callAnthropicAPI(apiKey: String, prompt: String): String {
+        val escapedPrompt = prompt
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+
         val requestBody = """
                 {
-                    "model": ${config.model},
+                    "model": "${config.model}",
                     "max_tokens": 1000,
                     "messages": [
                         {
                             "role": "user",
-                            "content": "$prompt"
+                            "content": "$escapedPrompt"
                         }
                     ]
                 }
             """.trimIndent()
+        println("requestBody: $requestBody")
 
         val request = HttpRequest.newBuilder()
             .uri(URI.create("https://api.anthropic.com/v1/messages"))
