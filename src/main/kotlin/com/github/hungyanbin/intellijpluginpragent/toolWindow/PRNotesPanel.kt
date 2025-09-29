@@ -1,6 +1,8 @@
 package com.github.hungyanbin.intellijpluginpragent.toolWindow
 
 import com.github.hungyanbin.intellijpluginpragent.repository.SecretRepository
+import com.github.hungyanbin.intellijpluginpragent.service.CreatePRRequest
+import com.github.hungyanbin.intellijpluginpragent.service.GitHubAPIService
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.ui.components.JBPanel
@@ -9,7 +11,9 @@ import com.intellij.ui.components.JBTextArea
 import kotlinx.coroutines.*
 import java.awt.BorderLayout
 import java.awt.Dimension
+import java.awt.FlowLayout
 import javax.swing.JButton
+import javax.swing.JPanel
 
 class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
 
@@ -18,12 +22,33 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
     private val anthropicAPIService = AnthropicAPIService()
     private val gitCommandHelper = GitCommandHelper(project.basePath!!)
     private val secretRepository = SecretRepository()
+    private val githubAPIService = GitHubAPIService()
+    private var currentBranchHistory: BranchHistory? = null
+    private var createPRButton: JButton
 
     init {
         layout = BorderLayout()
 
-        val generateButton = JButton("Generate PR Notes").apply {
-            addActionListener { generatePRNotes() }
+        val buttonPanel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
+            val generateButton = JButton("Generate PR Notes").apply {
+                addActionListener {
+                    coroutineScope.launch {
+                        generatePRNotes()
+                    }
+                }
+            }
+
+            createPRButton = JButton("Create PR").apply {
+                addActionListener {
+                    coroutineScope.launch {
+                        createPullRequest()
+                    }
+                }
+                isEnabled = false // Initially disabled until notes are generated
+            }
+
+            add(generateButton)
+            add(createPRButton)
         }
 
         prNotesArea.apply {
@@ -35,11 +60,11 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
             preferredSize = Dimension(400, 300)
         }
 
-        add(generateButton, BorderLayout.NORTH)
+        add(buttonPanel, BorderLayout.NORTH)
         add(prScrollPane, BorderLayout.CENTER)
     }
 
-    private fun generatePRNotes() {
+    private suspend fun generatePRNotes() {
         val apiKey = secretRepository.getAnthropicApiKey() ?: ""
 
         if (apiKey.isEmpty()) {
@@ -61,7 +86,9 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
                 val response = anthropicAPIService.callAnthropicAPI(apiKey, prPrompt)
 
                 ApplicationManager.getApplication().invokeLater {
+                    currentBranchHistory = branchHistory
                     prNotesArea.text = response
+                    createPRButton.isEnabled = true
                 }
             } catch (e: Exception) {
                 ApplicationManager.getApplication().invokeLater {
@@ -69,6 +96,141 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
                 }
             }
         }
+    }
+
+    private suspend fun createPullRequest() {
+        val branchHistory = currentBranchHistory
+        val githubPat = secretRepository.getGithubPat()
+        val prNotes = prNotesArea.text
+
+        if (branchHistory == null) {
+            prNotesArea.text = "Error: Please generate PR notes first"
+            return
+        }
+
+        if (githubPat.isNullOrEmpty()) {
+            prNotesArea.text = "Error: Please enter and apply your GitHub PAT in the Config tab"
+            return
+        }
+
+        if (prNotes.isEmpty() || prNotes.contains("Error:") || prNotes.contains("Click 'Generate")) {
+            prNotesArea.text = "Error: Please generate valid PR notes first"
+            return
+        }
+
+        createPRButton.isEnabled = false
+        prNotesArea.text = "Creating pull request on GitHub..."
+
+        coroutineScope.launch {
+            try {
+                // Check and push parent branch if it doesn't exist on remote
+                ApplicationManager.getApplication().invokeLater {
+                    prNotesArea.text = "Checking branches on remote..."
+                }
+
+                val parentBranchExists = gitCommandHelper.checkBranchExistsOnRemote(branchHistory.parentBranch.name)
+                if (!parentBranchExists) {
+                    ApplicationManager.getApplication().invokeLater {
+                        prNotesArea.text = "Pushing parent branch ${branchHistory.parentBranch.name} to remote..."
+                    }
+
+                    val parentPushSuccess = gitCommandHelper.pushBranchToRemote(branchHistory.parentBranch.name)
+                    if (!parentPushSuccess) {
+                        ApplicationManager.getApplication().invokeLater {
+                            prNotesArea.text = "Error: Failed to push parent branch ${branchHistory.parentBranch.name} to remote. Please check your git credentials and try again."
+                            createPRButton.isEnabled = true
+                        }
+                        return@launch
+                    }
+                }
+
+                // Push the current branch to remote
+                ApplicationManager.getApplication().invokeLater {
+                    prNotesArea.text = "Pushing current branch ${branchHistory.currentBranch.name} to remote..."
+                }
+
+                val pushSuccess = gitCommandHelper.pushCurrentBranchToRemote(branchHistory.currentBranch.name)
+                if (!pushSuccess) {
+                    ApplicationManager.getApplication().invokeLater {
+                        prNotesArea.text = "Error: Failed to push current branch to remote. Please check your git credentials and try again."
+                        createPRButton.isEnabled = true
+                    }
+                    return@launch
+                }
+
+                ApplicationManager.getApplication().invokeLater {
+                    prNotesArea.text = "Creating pull request on GitHub..."
+                }
+
+                // Get repository information from git remote
+                val remoteUrl = gitCommandHelper.getRemoteUrl()
+                if (remoteUrl == null) {
+                    ApplicationManager.getApplication().invokeLater {
+                        prNotesArea.text = "Error: Could not determine GitHub repository from git remote"
+                        createPRButton.isEnabled = true
+                    }
+                    return@launch
+                }
+
+                val repository = githubAPIService.parseGitHubRepository(remoteUrl)
+                if (repository == null) {
+                    ApplicationManager.getApplication().invokeLater {
+                        prNotesArea.text = "Error: Could not parse GitHub repository from remote URL: $remoteUrl"
+                        createPRButton.isEnabled = true
+                    }
+                    return@launch
+                }
+
+                // Extract title from PR notes (first line or first heading)
+                val title = extractTitleFromPRNotes(prNotes, branchHistory.currentBranch.name)
+
+                val prRequest = CreatePRRequest(
+                    title = title,
+                    head = branchHistory.currentBranch.name,
+                    base = branchHistory.parentBranch.name,
+                    body = prNotes
+                )
+
+                githubAPIService.createPullRequest(githubPat, repository, prRequest)
+
+                ApplicationManager.getApplication().invokeLater {
+                    prNotesArea.text = "✅ Pull request created successfully!\n\n$prNotes"
+                    createPRButton.isEnabled = true
+                }
+
+            } catch (e: Exception) {
+                ApplicationManager.getApplication().invokeLater {
+                    prNotesArea.text = "Error creating pull request: ${e.message}\n\n$prNotes"
+                    createPRButton.isEnabled = true
+                }
+            }
+        }
+    }
+
+    private fun extractTitleFromPRNotes(prNotes: String, fallbackBranch: String): String {
+        val lines = prNotes.split("\n")
+
+        // Look for the first heading (# or ##)
+        for (line in lines) {
+            val trimmed = line.trim()
+            if (trimmed.startsWith("# ")) {
+                return trimmed.substring(2).trim()
+            }
+            if (trimmed.startsWith("## ")) {
+                return trimmed.substring(3).trim()
+            }
+        }
+
+        // Look for the first non-empty line
+        for (line in lines) {
+            val trimmed = line.trim()
+            if (trimmed.isNotEmpty() && !trimmed.startsWith("```")) {
+                return trimmed.take(100) // Limit title length
+            }
+        }
+
+        // Fallback to branch name
+        return fallbackBranch.replace("_", " ").replace("-", " ")
     }
 
     private fun buildPRPrompt(branchHistory: BranchHistory, fileDiff: String): String {

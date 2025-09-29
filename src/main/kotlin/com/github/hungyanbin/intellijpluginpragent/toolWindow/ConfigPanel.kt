@@ -76,51 +76,57 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
         add(scrollPane, BorderLayout.CENTER)
 
         // Load saved credentials on initialization
-        loadSavedCredentials()
+        coroutineScope.launch {
+            loadSavedCredentials()
+        }
     }
 
     private fun applySettings() {
         val apiKey = String(apiKeyField.password)
         val githubPat = String(githubPatField.password)
-        val messages = mutableListOf<String>()
 
-        if (apiKey.isNotEmpty()) {
-            secretRepository.storeAnthropicApiKey(apiKey)
-            messages.add("Anthropic API key saved")
-        }
+        resultArea.text = "Saving credentials..."
 
-        if (githubPat.isNotEmpty()) {
-            secretRepository.storeGithubPat(githubPat)
-            messages.add("GitHub PAT saved")
-        }
+        coroutineScope.launch {
+            val messages = mutableListOf<String>()
 
-        if (messages.isNotEmpty()) {
-            resultArea.text = messages.joinToString(", ") + " successfully!"
-        } else {
-            resultArea.text = "Please enter at least one credential before applying"
+            if (apiKey.isNotEmpty()) {
+                secretRepository.storeAnthropicApiKey(apiKey)
+                messages.add("Anthropic API key saved")
+            }
+
+            if (githubPat.isNotEmpty()) {
+                secretRepository.storeGithubPat(githubPat)
+                messages.add("GitHub PAT saved")
+            }
+
+            ApplicationManager.getApplication().invokeLater {
+                if (messages.isNotEmpty()) {
+                    resultArea.text = messages.joinToString(", ") + " successfully!"
+                } else {
+                    resultArea.text = "Please enter at least one credential before applying"
+                }
+            }
         }
     }
 
-    private fun loadSavedCredentials() {
+    private suspend fun loadSavedCredentials() {
         val savedApiKey = secretRepository.getAnthropicApiKey()
-        if (savedApiKey != null) {
-            apiKeyField.text = savedApiKey
-        }
-
         val savedGithubPat = secretRepository.getGithubPat()
-        if (savedGithubPat != null) {
-            githubPatField.text = savedGithubPat
+
+        ApplicationManager.getApplication().invokeLater {
+            if (savedApiKey != null) {
+                apiKeyField.text = savedApiKey
+            }
+
+            if (savedGithubPat != null) {
+                githubPatField.text = savedGithubPat
+            }
         }
     }
 
     private fun sendRequest() {
-        val apiKey = getStoredApiKey()
         val prompt = inputField.text
-
-        if (apiKey.isEmpty()) {
-            resultArea.text = "Error: Please enter and apply your Anthropic API key first"
-            return
-        }
 
         if (prompt.isEmpty()) {
             resultArea.text = "Error: Please enter a prompt"
@@ -131,6 +137,16 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
 
         coroutineScope.launch {
             try {
+                // Get API key on background thread
+                val apiKey = secretRepository.getAnthropicApiKey() ?: ""
+
+                if (apiKey.isEmpty()) {
+                    ApplicationManager.getApplication().invokeLater {
+                        resultArea.text = "Error: Please enter and apply your Anthropic API key first"
+                    }
+                    return@launch
+                }
+
                 val response = anthropicAPIService.callAnthropicAPI(apiKey, prompt)
                 ApplicationManager.getApplication().invokeLater {
                     resultArea.text = response
@@ -141,10 +157,6 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
                 }
             }
         }
-    }
-
-    private fun getStoredApiKey(): String {
-        return secretRepository.getAnthropicApiKey() ?: ""
     }
 
     fun cleanup() {
