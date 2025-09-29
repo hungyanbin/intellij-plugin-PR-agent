@@ -1,44 +1,51 @@
 package com.github.hungyanbin.intellijpluginpragent.repository
 
 import com.intellij.credentialStore.CredentialAttributes
-import com.intellij.credentialStore.Credentials
 import com.intellij.ide.passwordSafe.PasswordSafe
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class SecretRepository {
 
     private val anthropicApiKeyAttribute = CredentialAttributes(
-        "IntelliJ Plugin PR Agent",
+        "anthropic",
         "anthropic_api_key"
     )
 
     private val githubPatAttribute = CredentialAttributes(
-        "IntelliJ Plugin PR Agent",
+        "github",
         "github_pat"
     )
 
-    fun storeAnthropicApiKey(apiKey: String) {
-        val credentials = Credentials("anthropic_api_key", apiKey)
-        PasswordSafe.instance.set(anthropicApiKeyAttribute, credentials)
+    suspend fun storeAnthropicApiKey(apiKey: String) = withContext(Dispatchers.IO) {
+        PasswordSafe.instance.setPassword(anthropicApiKeyAttribute, apiKey)
     }
 
-    fun getAnthropicApiKey(): String? {
-        return PasswordSafe.instance.getPassword(anthropicApiKeyAttribute)
+    suspend fun getAnthropicApiKey(): String? = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val result = PasswordSafe.instance.getPassword(anthropicApiKeyAttribute)
+            result
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
     }
 
-    fun clearAnthropicApiKey() {
-        PasswordSafe.instance.set(anthropicApiKeyAttribute, null)
+    suspend fun storeGithubPat(pat: String) = withContext(Dispatchers.IO) {
+        PasswordSafe.instance.setPassword(githubPatAttribute, pat)
     }
 
-    fun storeGithubPat(pat: String) {
-        val credentials = Credentials("github_pat", pat)
-        PasswordSafe.instance.set(githubPatAttribute, credentials)
+    suspend fun getGithubPat(): String? = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val result = PasswordSafe.instance.getPassword(githubPatAttribute)
+            result
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
     }
 
-    fun getGithubPat(): String? {
-        return PasswordSafe.instance.getPassword(githubPatAttribute)
-    }
-
-    fun clearGithubPat() {
-        PasswordSafe.instance.set(githubPatAttribute, null)
+    suspend fun clearGithubPat() = withContext(Dispatchers.IO) {
+        PasswordSafe.instance.setPassword(githubPatAttribute, null)
     }
 }
