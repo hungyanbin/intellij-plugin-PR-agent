@@ -1,6 +1,7 @@
 package com.github.hungyanbin.intellijpluginpragent.toolWindow
 
 import com.github.hungyanbin.intellijpluginpragent.repository.SecretRepository
+import com.github.hungyanbin.intellijpluginpragent.service.AnthropicAPIService
 import com.github.hungyanbin.intellijpluginpragent.utils.runOnUI
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.ui.components.JBLabel

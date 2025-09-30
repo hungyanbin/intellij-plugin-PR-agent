@@ -1,11 +1,13 @@
 package com.github.hungyanbin.intellijpluginpragent.toolWindow
 
 import com.github.hungyanbin.intellijpluginpragent.repository.SecretRepository
+import com.github.hungyanbin.intellijpluginpragent.service.AnthropicAPIService
+import com.github.hungyanbin.intellijpluginpragent.service.BranchHistory
 import com.github.hungyanbin.intellijpluginpragent.service.CreatePRRequest
+import com.github.hungyanbin.intellijpluginpragent.service.GitCommandService
 import com.github.hungyanbin.intellijpluginpragent.service.GitHubAPIService
 import com.github.hungyanbin.intellijpluginpragent.service.GitHubRepository
 import com.github.hungyanbin.intellijpluginpragent.utils.runOnUI
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.ui.components.JBPanel
 import com.intellij.ui.components.JBScrollPane
@@ -22,7 +24,7 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
     private val prNotesArea = JBTextArea()
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val anthropicAPIService = AnthropicAPIService()
-    private val gitCommandHelper = GitCommandHelper(project.basePath!!)
+    private val gitCommandService = GitCommandService(project.basePath!!)
     private val secretRepository = SecretRepository()
     private val githubAPIService = GitHubAPIService()
     private var currentBranchHistory: BranchHistory? = null
@@ -78,8 +80,8 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
 
         coroutineScope.launch {
             try {
-                val branchHistory = gitCommandHelper.getBranchHistory()
-                val fileDiff = gitCommandHelper.getFileDiff(
+                val branchHistory = gitCommandService.getBranchHistory()
+                val fileDiff = gitCommandService.getFileDiff(
                     branchHistory.parentBranch.hash,
                     branchHistory.currentBranch.hash
                 )
@@ -172,7 +174,7 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
     }
 
     private suspend fun getGithubRepository(): GitHubRepository? {
-        val remoteUrl = gitCommandHelper.getRemoteUrl()
+        val remoteUrl = gitCommandService.getRemoteUrl()
         if (remoteUrl == null) {
             runOnUI {
                 prNotesArea.text = "Error: Could not determine GitHub repository from git remote"
@@ -194,7 +196,7 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
     }
 
     private suspend fun tryPushCurrentBranch(branchHistory: BranchHistory): Boolean {
-        val pushSuccess = gitCommandHelper.pushCurrentBranchToRemote(branchHistory.currentBranch.name)
+        val pushSuccess = gitCommandService.pushCurrentBranchToRemote(branchHistory.currentBranch.name)
         if (!pushSuccess) {
             runOnUI {
                 prNotesArea.text =
@@ -207,13 +209,13 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
     }
 
     private suspend fun tryPushRemoteBranch(branchHistory: BranchHistory): Boolean {
-        val parentBranchExists = gitCommandHelper.checkBranchExistsOnRemote(branchHistory.parentBranch.name)
+        val parentBranchExists = gitCommandService.checkBranchExistsOnRemote(branchHistory.parentBranch.name)
         if (!parentBranchExists) {
             runOnUI {
                 prNotesArea.text = "Pushing parent branch ${branchHistory.parentBranch.name} to remote..."
             }
 
-            val parentPushSuccess = gitCommandHelper.pushBranchToRemote(branchHistory.parentBranch.name)
+            val parentPushSuccess = gitCommandService.pushBranchToRemote(branchHistory.parentBranch.name)
             if (!parentPushSuccess) {
                 runOnUI {
                     prNotesArea.text =

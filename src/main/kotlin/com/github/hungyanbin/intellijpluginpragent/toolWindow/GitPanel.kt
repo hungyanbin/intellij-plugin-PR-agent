@@ -1,7 +1,7 @@
 package com.github.hungyanbin.intellijpluginpragent.toolWindow
 
+import com.github.hungyanbin.intellijpluginpragent.service.GitCommandService
 import com.github.hungyanbin.intellijpluginpragent.utils.runOnUI
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.ui.components.JBPanel
 import com.intellij.ui.components.JBScrollPane
@@ -15,7 +15,7 @@ class GitPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
 
     private val gitHistoryArea = JBTextArea()
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private val gitCommandHelper = GitCommandHelper(project.basePath!!)
+    private val gitCommandService = GitCommandService(project.basePath!!)
 
     init {
         layout = BorderLayout()
@@ -42,9 +42,9 @@ class GitPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
 
         coroutineScope.launch {
             try {
-                val branchHistory = gitCommandHelper.getBranchHistory()
+                val branchHistory = gitCommandService.getBranchHistory()
 
-                val fileDiff = gitCommandHelper.getFileDiff(
+                val fileDiff = gitCommandService.getFileDiff(
                     branchHistory.parentBranch.hash,
                     branchHistory.currentBranch.hash
                 )
