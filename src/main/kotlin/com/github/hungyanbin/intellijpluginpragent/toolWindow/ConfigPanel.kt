@@ -1,6 +1,7 @@
 package com.github.hungyanbin.intellijpluginpragent.toolWindow
 
 import com.github.hungyanbin.intellijpluginpragent.repository.SecretRepository
+import com.github.hungyanbin.intellijpluginpragent.utils.runOnUI
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPanel
@@ -100,7 +101,7 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
                 messages.add("GitHub PAT saved")
             }
 
-            ApplicationManager.getApplication().invokeLater {
+            runOnUI {
                 if (messages.isNotEmpty()) {
                     resultArea.text = messages.joinToString(", ") + " successfully!"
                 } else {
@@ -114,7 +115,7 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
         val savedApiKey = secretRepository.getAnthropicApiKey()
         val savedGithubPat = secretRepository.getGithubPat()
 
-        ApplicationManager.getApplication().invokeLater {
+        runOnUI {
             if (savedApiKey != null) {
                 apiKeyField.text = savedApiKey
             }
@@ -141,18 +142,18 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
                 val apiKey = secretRepository.getAnthropicApiKey() ?: ""
 
                 if (apiKey.isEmpty()) {
-                    ApplicationManager.getApplication().invokeLater {
+                    runOnUI {
                         resultArea.text = "Error: Please enter and apply your Anthropic API key first"
                     }
                     return@launch
                 }
 
                 val response = anthropicAPIService.callAnthropicAPI(apiKey, prompt)
-                ApplicationManager.getApplication().invokeLater {
+                runOnUI {
                     resultArea.text = response
                 }
             } catch (e: Exception) {
-                ApplicationManager.getApplication().invokeLater {
+                runOnUI {
                     resultArea.text = "Error: ${e.message}"
                 }
             }

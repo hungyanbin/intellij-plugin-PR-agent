@@ -1,5 +1,6 @@
 package com.github.hungyanbin.intellijpluginpragent.toolWindow
 
+import com.github.hungyanbin.intellijpluginpragent.utils.runOnUI
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.ui.components.JBPanel
@@ -48,7 +49,7 @@ class GitPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
                     branchHistory.currentBranch.hash
                 )
 
-                ApplicationManager.getApplication().invokeLater {
+                runOnUI {
                     val historyText = buildString {
                         appendLine("Branch History:")
                         appendLine("Current Branch: ${branchHistory.currentBranch.name}")
@@ -70,7 +71,7 @@ class GitPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
                     gitHistoryArea.text = historyText
                 }
             } catch (e: Exception) {
-                ApplicationManager.getApplication().invokeLater {
+                runOnUI {
                     gitHistoryArea.text = "Error loading git history: ${e.message}"
                 }
             }

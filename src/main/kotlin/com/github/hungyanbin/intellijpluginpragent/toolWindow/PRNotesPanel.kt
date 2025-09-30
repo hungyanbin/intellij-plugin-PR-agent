@@ -3,6 +3,8 @@ package com.github.hungyanbin.intellijpluginpragent.toolWindow
 import com.github.hungyanbin.intellijpluginpragent.repository.SecretRepository
 import com.github.hungyanbin.intellijpluginpragent.service.CreatePRRequest
 import com.github.hungyanbin.intellijpluginpragent.service.GitHubAPIService
+import com.github.hungyanbin.intellijpluginpragent.service.GitHubRepository
+import com.github.hungyanbin.intellijpluginpragent.utils.runOnUI
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.ui.components.JBPanel
@@ -85,13 +87,13 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
                 val prPrompt = buildPRPrompt(branchHistory, fileDiff)
                 val response = anthropicAPIService.callAnthropicAPI(apiKey, prPrompt)
 
-                ApplicationManager.getApplication().invokeLater {
+                runOnUI {
                     currentBranchHistory = branchHistory
                     prNotesArea.text = response
                     createPRButton.isEnabled = true
                 }
             } catch (e: Exception) {
-                ApplicationManager.getApplication().invokeLater {
+                runOnUI {
                     prNotesArea.text = "Error generating PR notes: ${e.message}"
                 }
             }
@@ -124,62 +126,24 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
         coroutineScope.launch {
             try {
                 // Check and push parent branch if it doesn't exist on remote
-                ApplicationManager.getApplication().invokeLater {
+                runOnUI {
                     prNotesArea.text = "Checking branches on remote..."
                 }
 
-                val parentBranchExists = gitCommandHelper.checkBranchExistsOnRemote(branchHistory.parentBranch.name)
-                if (!parentBranchExists) {
-                    ApplicationManager.getApplication().invokeLater {
-                        prNotesArea.text = "Pushing parent branch ${branchHistory.parentBranch.name} to remote..."
-                    }
-
-                    val parentPushSuccess = gitCommandHelper.pushBranchToRemote(branchHistory.parentBranch.name)
-                    if (!parentPushSuccess) {
-                        ApplicationManager.getApplication().invokeLater {
-                            prNotesArea.text = "Error: Failed to push parent branch ${branchHistory.parentBranch.name} to remote. Please check your git credentials and try again."
-                            createPRButton.isEnabled = true
-                        }
-                        return@launch
-                    }
-                }
+                if (tryPushRemoteBranch(branchHistory)) return@launch
 
                 // Push the current branch to remote
-                ApplicationManager.getApplication().invokeLater {
+                runOnUI {
                     prNotesArea.text = "Pushing current branch ${branchHistory.currentBranch.name} to remote..."
                 }
 
-                val pushSuccess = gitCommandHelper.pushCurrentBranchToRemote(branchHistory.currentBranch.name)
-                if (!pushSuccess) {
-                    ApplicationManager.getApplication().invokeLater {
-                        prNotesArea.text = "Error: Failed to push current branch to remote. Please check your git credentials and try again."
-                        createPRButton.isEnabled = true
-                    }
-                    return@launch
-                }
+                if (tryPushCurrentBranch(branchHistory)) return@launch
 
-                ApplicationManager.getApplication().invokeLater {
+                runOnUI {
                     prNotesArea.text = "Creating pull request on GitHub..."
                 }
 
-                // Get repository information from git remote
-                val remoteUrl = gitCommandHelper.getRemoteUrl()
-                if (remoteUrl == null) {
-                    ApplicationManager.getApplication().invokeLater {
-                        prNotesArea.text = "Error: Could not determine GitHub repository from git remote"
-                        createPRButton.isEnabled = true
-                    }
-                    return@launch
-                }
-
-                val repository = githubAPIService.parseGitHubRepository(remoteUrl)
-                if (repository == null) {
-                    ApplicationManager.getApplication().invokeLater {
-                        prNotesArea.text = "Error: Could not parse GitHub repository from remote URL: $remoteUrl"
-                        createPRButton.isEnabled = true
-                    }
-                    return@launch
-                }
+                val repository = getGithubRepository() ?: return@launch
 
                 // Extract title from PR notes (first line or first heading)
                 val title = extractTitleFromPRNotes(prNotes, branchHistory.currentBranch.name)
@@ -193,18 +157,73 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
 
                 githubAPIService.createPullRequest(githubPat, repository, prRequest)
 
-                ApplicationManager.getApplication().invokeLater {
+                runOnUI {
                     prNotesArea.text = "✅ Pull request created successfully!\n\n$prNotes"
                     createPRButton.isEnabled = true
                 }
 
             } catch (e: Exception) {
-                ApplicationManager.getApplication().invokeLater {
+                runOnUI {
                     prNotesArea.text = "Error creating pull request: ${e.message}\n\n$prNotes"
                     createPRButton.isEnabled = true
                 }
             }
         }
+    }
+
+    private suspend fun getGithubRepository(): GitHubRepository? {
+        val remoteUrl = gitCommandHelper.getRemoteUrl()
+        if (remoteUrl == null) {
+            runOnUI {
+                prNotesArea.text = "Error: Could not determine GitHub repository from git remote"
+                createPRButton.isEnabled = true
+            }
+            return null
+        }
+
+        val repository = githubAPIService.parseGitHubRepository(remoteUrl)
+        if (repository == null) {
+            runOnUI {
+                prNotesArea.text = "Error: Could not parse GitHub repository from remote URL: $remoteUrl"
+                createPRButton.isEnabled = true
+            }
+            return null
+        }
+
+        return repository
+    }
+
+    private suspend fun tryPushCurrentBranch(branchHistory: BranchHistory): Boolean {
+        val pushSuccess = gitCommandHelper.pushCurrentBranchToRemote(branchHistory.currentBranch.name)
+        if (!pushSuccess) {
+            runOnUI {
+                prNotesArea.text =
+                    "Error: Failed to push current branch to remote. Please check your git credentials and try again."
+                createPRButton.isEnabled = true
+            }
+            return true
+        }
+        return false
+    }
+
+    private suspend fun tryPushRemoteBranch(branchHistory: BranchHistory): Boolean {
+        val parentBranchExists = gitCommandHelper.checkBranchExistsOnRemote(branchHistory.parentBranch.name)
+        if (!parentBranchExists) {
+            runOnUI {
+                prNotesArea.text = "Pushing parent branch ${branchHistory.parentBranch.name} to remote..."
+            }
+
+            val parentPushSuccess = gitCommandHelper.pushBranchToRemote(branchHistory.parentBranch.name)
+            if (!parentPushSuccess) {
+                runOnUI {
+                    prNotesArea.text =
+                        "Error: Failed to push parent branch ${branchHistory.parentBranch.name} to remote. Please check your git credentials and try again."
+                    createPRButton.isEnabled = true
+                }
+                return true
+            }
+        }
+        return false
     }
 
     private fun extractTitleFromPRNotes(prNotes: String, fallbackBranch: String): String {
