@@ -27,19 +27,16 @@ class MyToolWindowFactory : ToolWindowFactory {
 
         private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         private val configPanel = ConfigPanel()
-        private val gitPanel = GitPanel(project)
         private val prNotesPanel = PRNotesPanel(project)
 
         fun getContent() = JBTabbedPane().apply {
             addTab("Config", configPanel)
-            addTab("Git", gitPanel)
             addTab("PR Notes", prNotesPanel)
         }
 
         fun cleanup() {
             coroutineScope.cancel()
             configPanel.cleanup()
-            gitPanel.cleanup()
             prNotesPanel.cleanup()
         }
     }
