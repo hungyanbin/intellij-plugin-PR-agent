@@ -14,7 +14,12 @@ import org.intellij.plugins.markdown.ui.preview.jcef.MarkdownJCEFHtmlPanel
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.FlowLayout
+import java.awt.GridBagConstraints
+import java.awt.GridBagLayout
+import java.awt.Insets
 import javax.swing.JButton
+import javax.swing.JComboBox
+import javax.swing.JLabel
 import javax.swing.JPanel
 
 class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
@@ -28,26 +33,71 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val viewModel = PRNotesPanelViewModel(project.basePath!!)
     private var createPRButton: JButton
+    private val baseBranchComboBox = JComboBox<String>().apply {
+        addActionListener {
+            viewModel.onBaseBranchSelected(selectedItem as? String)
+        }
+    }
+    private val compareBranchComboBox = JComboBox<String>().apply {
+        addActionListener {
+            viewModel.onCompareBranchSelected(selectedItem as? String)
+        }
+    }
 
     init {
         layout = BorderLayout()
 
-        val buttonPanel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
-            val generateButton = JButton("Generate PR Notes").apply {
-                addActionListener {
-                    viewModel.onGeneratePRNotesClicked()
-                }
+        // Create top panel with branch selectors and buttons
+        val topPanel = JPanel(GridBagLayout()).apply {
+            val gbc = GridBagConstraints().apply {
+                insets = Insets(5, 5, 5, 5)
+                fill = GridBagConstraints.HORIZONTAL
             }
 
-            createPRButton = JButton("Create PR").apply {
-                addActionListener {
-                    viewModel.onCreatePRClicked(plainTextArea.text)
-                }
-                isEnabled = false // Initially disabled until notes are generated
-            }
+            // Base branch selector - Row 0
+            gbc.gridx = 0
+            gbc.gridy = 0
+            gbc.weightx = 0.0
+            add(JLabel("Base Branch:"), gbc)
 
-            add(generateButton)
-            add(createPRButton)
+            gbc.gridx = 1
+            gbc.weightx = 1.0
+            add(baseBranchComboBox, gbc)
+
+            // Compare branch selector - Row 1
+            gbc.gridx = 0
+            gbc.gridy = 1
+            gbc.weightx = 0.0
+            add(JLabel("Compare Branch:"), gbc)
+
+            gbc.gridx = 1
+            gbc.weightx = 1.0
+            add(compareBranchComboBox, gbc)
+
+            // Buttons panel - Row 2
+            gbc.gridx = 0
+            gbc.gridy = 2
+            gbc.gridwidth = 2
+            gbc.weightx = 1.0
+            gbc.fill = GridBagConstraints.NONE
+            gbc.anchor = GridBagConstraints.WEST
+            add(JPanel(FlowLayout(FlowLayout.LEFT, 5, 0)).apply {
+                val generateButton = JButton("Generate PR Notes").apply {
+                    addActionListener {
+                        viewModel.onGeneratePRNotesClicked()
+                    }
+                }
+
+                createPRButton = JButton("Create PR").apply {
+                    addActionListener {
+                        viewModel.onCreatePRClicked(plainTextArea.text)
+                    }
+                    isEnabled = false // Initially disabled until notes are generated
+                }
+
+                add(generateButton)
+                add(createPRButton)
+            }, gbc)
         }
 
         plainTextArea.apply {
@@ -73,8 +123,44 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
         tabbedPane.addTab("Plain Text", plainTextScrollPane)
         tabbedPane.addTab("Preview", previewPanel)
 
-        add(buttonPanel, BorderLayout.NORTH)
+        add(topPanel, BorderLayout.NORTH)
         add(tabbedPane, BorderLayout.CENTER)
+
+        // Collect branch list and populate combo boxes
+        coroutineScope.launch {
+            viewModel.recentBranches.collect { branches ->
+                runOnUI {
+                    baseBranchComboBox.removeAllItems()
+                    compareBranchComboBox.removeAllItems()
+                    branches.forEach { branch ->
+                        baseBranchComboBox.addItem(branch)
+                        compareBranchComboBox.addItem(branch)
+                    }
+                }
+            }
+        }
+
+        // Set default selected base branch
+        coroutineScope.launch {
+            viewModel.selectedBaseBranch.collect { branchName ->
+                if (branchName != null) {
+                    runOnUI {
+                        baseBranchComboBox.selectedItem = branchName
+                    }
+                }
+            }
+        }
+
+        // Set default selected compare branch
+        coroutineScope.launch {
+            viewModel.selectedCompareBranch.collect { branchName ->
+                if (branchName != null) {
+                    runOnUI {
+                        compareBranchComboBox.selectedItem = branchName
+                    }
+                }
+            }
+        }
 
         coroutineScope.launch {
             viewModel.prNotesText.collect { markdownText ->
