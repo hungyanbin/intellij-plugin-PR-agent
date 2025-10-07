@@ -42,7 +42,7 @@ class GitPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
 
         coroutineScope.launch {
             try {
-                val branchHistory = gitCommandService.getBranchHistory()
+                val branchHistory = gitCommandService.getLatestBranchHistory()
 
                 val fileDiff = gitCommandService.getFileDiff(
                     branchHistory.parentBranch.hash,
