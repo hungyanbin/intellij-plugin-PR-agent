@@ -30,8 +30,8 @@ class MyToolWindowFactory : ToolWindowFactory {
         private val prNotesPanel = PRNotesPanel(project)
 
         fun getContent() = JBTabbedPane().apply {
-            addTab("Config", configPanel)
             addTab("PR Notes", prNotesPanel)
+            addTab("Config", configPanel)
         }
 
         fun cleanup() {
