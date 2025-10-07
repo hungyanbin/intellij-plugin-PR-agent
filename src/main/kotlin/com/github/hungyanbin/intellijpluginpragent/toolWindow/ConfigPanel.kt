@@ -1,17 +1,13 @@
 package com.github.hungyanbin.intellijpluginpragent.toolWindow
 
 import com.github.hungyanbin.intellijpluginpragent.repository.SecretRepository
-import com.github.hungyanbin.intellijpluginpragent.service.AnthropicAPIService
 import com.github.hungyanbin.intellijpluginpragent.utils.runOnUI
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPanel
-import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.JBTextField
 import kotlinx.coroutines.*
 import java.awt.BorderLayout
-import java.awt.Dimension
 import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
 import javax.swing.JButton
@@ -25,7 +21,6 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
     private val inputField = JBTextField()
     private val resultArea = JBTextArea()
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private val anthropicAPIService = AnthropicAPIService()
     private val secretRepository = SecretRepository()
 
     init {
@@ -51,18 +46,6 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
             add(JButton("Apply").apply {
                 addActionListener { applySettings() }
             }, gbc)
-
-            // Prompt row
-            gbc.gridx = 0; gbc.gridy = 2; gbc.gridheight = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0.0
-            add(JBLabel("Prompt:"), gbc)
-            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0
-            add(inputField, gbc)
-
-            // Send button
-            gbc.gridx = 2; gbc.gridy = 2; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0.0
-            add(JButton("Send to Claude").apply {
-                addActionListener { sendRequest() }
-            }, gbc)
         }
 
         resultArea.apply {
@@ -70,12 +53,8 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
             text = "Results will appear here..."
         }
 
-        val scrollPane = JBScrollPane(resultArea).apply {
-            preferredSize = Dimension(400, 300)
-        }
 
         add(inputPanel, BorderLayout.NORTH)
-        add(scrollPane, BorderLayout.CENTER)
 
         // Load saved credentials on initialization
         coroutineScope.launch {
@@ -123,40 +102,6 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
 
             if (savedGithubPat != null) {
                 githubPatField.text = savedGithubPat
-            }
-        }
-    }
-
-    private fun sendRequest() {
-        val prompt = inputField.text
-
-        if (prompt.isEmpty()) {
-            resultArea.text = "Error: Please enter a prompt"
-            return
-        }
-
-        resultArea.text = "Sending request to Claude..."
-
-        coroutineScope.launch {
-            try {
-                // Get API key on background thread
-                val apiKey = secretRepository.getAnthropicApiKey() ?: ""
-
-                if (apiKey.isEmpty()) {
-                    runOnUI {
-                        resultArea.text = "Error: Please enter and apply your Anthropic API key first"
-                    }
-                    return@launch
-                }
-
-                val response = anthropicAPIService.callAnthropicAPI(apiKey, prompt)
-                runOnUI {
-                    resultArea.text = response
-                }
-            } catch (e: Exception) {
-                runOnUI {
-                    resultArea.text = "Error: ${e.message}"
-                }
             }
         }
     }
