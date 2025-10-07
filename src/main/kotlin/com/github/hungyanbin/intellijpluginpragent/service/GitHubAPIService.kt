@@ -2,6 +2,8 @@ package com.github.hungyanbin.intellijpluginpragent.service
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -17,7 +19,17 @@ data class GitHubRepository(
     val name: String
 )
 
+@Serializable
+data class PullRequest(
+    val number: Int,
+    val title: String,
+    val body: String?,
+    val state: String,
+    val html_url: String
+)
+
 class GitHubAPIService {
+    private val json = Json { ignoreUnknownKeys = true }
 
     suspend fun createPullRequest(
         githubPat: String,
@@ -81,6 +93,53 @@ class GitHubAPIService {
         }
 
         return null
+    }
+
+    suspend fun findExistingPullRequest(
+        githubPat: String,
+        repository: GitHubRepository,
+        head: String,
+        base: String
+    ): PullRequest? = withContext(Dispatchers.IO) {
+        val apiUrl = "https://api.github.com/repos/${repository.owner}/${repository.name}/pulls?head=${repository.owner}:$head&base=$base&state=open"
+        val connection = URL(apiUrl).openConnection() as HttpURLConnection
+
+        try {
+            connection.requestMethod = "GET"
+            connection.setRequestProperty("Authorization", "token $githubPat")
+            connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
+
+            val responseCode = connection.responseCode
+            if (responseCode in 200..299) {
+                val responseText = connection.inputStream.bufferedReader().use { it.readText() }
+
+                // Parse JSON response manually (simple parsing for array of PRs)
+                if (responseText.trim() == "[]") {
+                    return@withContext null
+                }
+
+                // Extract first PR from array
+                return@withContext parseFirstPullRequest(responseText)
+            } else {
+                // If error, return null (no existing PR found or error accessing API)
+                return@withContext null
+            }
+
+        } catch (e: Exception) {
+            // Return null on any error
+            return@withContext null
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun parseFirstPullRequest(jsonArray: String): PullRequest? {
+        return try {
+            val pullRequests = json.decodeFromString<List<PullRequest>>(jsonArray)
+            pullRequests.firstOrNull()
+        } catch (e: Exception) {
+            null
+        }
     }
 
     private fun escapeJson(text: String): String {

@@ -7,6 +7,7 @@ import com.github.hungyanbin.intellijpluginpragent.service.CreatePRRequest
 import com.github.hungyanbin.intellijpluginpragent.service.GitCommandService
 import com.github.hungyanbin.intellijpluginpragent.service.GitHubAPIService
 import com.github.hungyanbin.intellijpluginpragent.service.GitHubRepository
+import com.github.hungyanbin.intellijpluginpragent.service.PullRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -41,10 +42,65 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
 
     fun onBaseBranchSelected(branchName: String?) {
         _selectedBaseBranch.value = branchName
+        checkForExistingPR()
     }
 
     fun onCompareBranchSelected(branchName: String?) {
         _selectedCompareBranch.value = branchName
+        checkForExistingPR()
+    }
+
+    private fun checkForExistingPR() {
+        val baseBranch = _selectedBaseBranch.value
+        val compareBranch = _selectedCompareBranch.value
+
+        // Only check if both branches are selected and different
+        if (baseBranch == null || compareBranch == null || baseBranch == compareBranch) {
+            return
+        }
+
+        coroutineScope.launch {
+            try {
+                val githubPat = secretRepository.getGithubPat()
+                if (githubPat.isNullOrEmpty()) {
+                    // No GitHub PAT configured, skip check
+                    return@launch
+                }
+
+                val remoteUrl = gitCommandService.getRemoteUrl()
+                val repository = remoteUrl?.let { githubAPIService.parseGitHubRepository(it) }
+
+                if (repository == null) {
+                    // Could not determine repository, skip check
+                    return@launch
+                }
+
+                val existingPR = githubAPIService.findExistingPullRequest(
+                    githubPat,
+                    repository,
+                    compareBranch,
+                    baseBranch
+                )
+
+                if (existingPR != null) {
+                    val prText = buildString {
+                        if (!existingPR.body.isNullOrEmpty()) {
+                            appendLine(existingPR.body)
+                        } else {
+                            appendLine("(No description)")
+                        }
+                    }
+                    _prNotesText.value = prText
+                    _isCreatePRButtonEnabled.value = false
+                } else {
+                    // No existing PR found, show default message
+                    _prNotesText.value = "Click 'Generate PR Notes' to create pull request notes using AI..."
+                    _isCreatePRButtonEnabled.value = false
+                }
+            } catch (e: Exception) {
+                // Silently fail - just don't update the text
+            }
+        }
     }
 
     init {
