@@ -11,6 +11,5 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow factoryClass="com.github.hungyanbin.intellijpluginpragent.toolWindow.PRAgentWindowFactory" id="PR agent"/>
-        <postStartupActivity implementation="com.github.hungyanbin.intellijpluginpragent.startup.MyProjectActivity" />
     </extensions>
 </idea-plugin>
