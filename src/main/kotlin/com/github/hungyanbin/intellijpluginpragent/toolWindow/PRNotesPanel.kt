@@ -13,6 +13,7 @@ import com.intellij.ui.components.JBPanel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextArea
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.FlowLayout
@@ -29,6 +30,8 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
     private val githubAPIService = GitHubAPIService()
     private var currentBranchHistory: BranchHistory? = null
     private var createPRButton: JButton
+    private val prNotesText = MutableStateFlow("")
+    private val isCreatePRButtonEnabled = MutableStateFlow(false)
 
     init {
         layout = BorderLayout()
@@ -36,7 +39,7 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
         val buttonPanel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
             val generateButton = JButton("Generate PR Notes").apply {
                 addActionListener {
-                    coroutineScope.launch {
+                    coroutineScope.launch(Dispatchers.IO) {
                         generatePRNotes()
                     }
                 }
@@ -44,7 +47,7 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
 
             createPRButton = JButton("Create PR").apply {
                 addActionListener {
-                    coroutineScope.launch {
+                    coroutineScope.launch(Dispatchers.IO) {
                         createPullRequest()
                     }
                 }
@@ -66,17 +69,34 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
 
         add(buttonPanel, BorderLayout.NORTH)
         add(prScrollPane, BorderLayout.CENTER)
+
+        coroutineScope.launch {
+            prNotesText.collect {
+                runOnUI {
+                    prNotesArea.text = it
+                }
+            }
+        }
+
+        coroutineScope.launch {
+            isCreatePRButtonEnabled.collect {
+                runOnUI {
+                    createPRButton.isEnabled = it
+                }
+            }
+        }
+
     }
 
     private suspend fun generatePRNotes() {
         val apiKey = secretRepository.getAnthropicApiKey() ?: ""
 
         if (apiKey.isEmpty()) {
-            prNotesArea.text = "Error: Please enter and apply your Anthropic API key in the Config tab"
+            prNotesText.value = "Error: Please enter and apply your Anthropic API key in the Config tab"
             return
         }
 
-        prNotesArea.text = "Generating PR notes..."
+        prNotesText.value = "Generating PR notes..."
 
         coroutineScope.launch {
             try {
@@ -89,15 +109,11 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
                 val prPrompt = buildPRPrompt(branchHistory, fileDiff)
                 val response = anthropicAPIService.callAnthropicAPI(apiKey, prPrompt)
 
-                runOnUI {
-                    currentBranchHistory = branchHistory
-                    prNotesArea.text = response
-                    createPRButton.isEnabled = true
-                }
+                prNotesText.value = response
+                isCreatePRButtonEnabled.value = true
+                currentBranchHistory = branchHistory
             } catch (e: Exception) {
-                runOnUI {
-                    prNotesArea.text = "Error generating PR notes: ${e.message}"
-                }
+                prNotesText.value = "Error generating PR notes: ${e.message}"
             }
         }
     }
@@ -108,42 +124,36 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
         val prNotes = prNotesArea.text
 
         if (branchHistory == null) {
-            prNotesArea.text = "Error: Please generate PR notes first"
+            prNotesText.value = "Error: Please generate PR notes first"
             return
         }
 
         if (githubPat.isNullOrEmpty()) {
-            prNotesArea.text = "Error: Please enter and apply your GitHub PAT in the Config tab"
+            prNotesText.value = "Error: Please enter and apply your GitHub PAT in the Config tab"
             return
         }
 
         if (prNotes.isEmpty() || prNotes.contains("Error:") || prNotes.contains("Click 'Generate")) {
-            prNotesArea.text = "Error: Please generate valid PR notes first"
+            prNotesText.value = "Error: Please generate valid PR notes first"
             return
         }
 
-        createPRButton.isEnabled = false
-        prNotesArea.text = "Creating pull request on GitHub..."
+        isCreatePRButtonEnabled.value = false
+        prNotesText.value = "Creating pull request on GitHub..."
 
         coroutineScope.launch {
             try {
                 // Check and push parent branch if it doesn't exist on remote
-                runOnUI {
-                    prNotesArea.text = "Checking branches on remote..."
-                }
+                prNotesText.value = "Checking branches on remote..."
 
                 if (tryPushRemoteBranch(branchHistory)) return@launch
 
                 // Push the current branch to remote
-                runOnUI {
-                    prNotesArea.text = "Pushing current branch ${branchHistory.currentBranch.name} to remote..."
-                }
+                prNotesText.value = "Pushing current branch ${branchHistory.currentBranch.name} to remote..."
 
                 if (tryPushCurrentBranch(branchHistory)) return@launch
 
-                runOnUI {
-                    prNotesArea.text = "Creating pull request on GitHub..."
-                }
+                prNotesText.value = "Creating pull request on GitHub..."
 
                 val repository = getGithubRepository() ?: return@launch
 
@@ -159,16 +169,11 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
 
                 githubAPIService.createPullRequest(githubPat, repository, prRequest)
 
-                runOnUI {
-                    prNotesArea.text = "✅ Pull request created successfully!\n\n$prNotes"
-                    createPRButton.isEnabled = true
-                }
-
+                prNotesText.value = "✅ Pull request created successfully!\n\n$prNotes"
+                isCreatePRButtonEnabled.value = true
             } catch (e: Exception) {
-                runOnUI {
-                    prNotesArea.text = "Error creating pull request: ${e.message}\n\n$prNotes"
-                    createPRButton.isEnabled = true
-                }
+                prNotesText.value = "Error creating pull request: ${e.message}\n\n$prNotes"
+                isCreatePRButtonEnabled.value = true
             }
         }
     }
@@ -176,19 +181,15 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
     private suspend fun getGithubRepository(): GitHubRepository? {
         val remoteUrl = gitCommandService.getRemoteUrl()
         if (remoteUrl == null) {
-            runOnUI {
-                prNotesArea.text = "Error: Could not determine GitHub repository from git remote"
-                createPRButton.isEnabled = true
-            }
+            prNotesText.value = "Error: Could not determine GitHub repository from git remote"
+            isCreatePRButtonEnabled.value = true
             return null
         }
 
         val repository = githubAPIService.parseGitHubRepository(remoteUrl)
         if (repository == null) {
-            runOnUI {
-                prNotesArea.text = "Error: Could not parse GitHub repository from remote URL: $remoteUrl"
-                createPRButton.isEnabled = true
-            }
+            prNotesText.value = "Error: Could not parse GitHub repository from remote URL: $remoteUrl"
+            isCreatePRButtonEnabled.value = true
             return null
         }
 
@@ -198,11 +199,9 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
     private suspend fun tryPushCurrentBranch(branchHistory: BranchHistory): Boolean {
         val pushSuccess = gitCommandService.pushCurrentBranchToRemote(branchHistory.currentBranch.name)
         if (!pushSuccess) {
-            runOnUI {
-                prNotesArea.text =
+            prNotesText.value =
                     "Error: Failed to push current branch to remote. Please check your git credentials and try again."
-                createPRButton.isEnabled = true
-            }
+            isCreatePRButtonEnabled.value = true
             return true
         }
         return false
@@ -211,17 +210,13 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
     private suspend fun tryPushRemoteBranch(branchHistory: BranchHistory): Boolean {
         val parentBranchExists = gitCommandService.checkBranchExistsOnRemote(branchHistory.parentBranch.name)
         if (!parentBranchExists) {
-            runOnUI {
-                prNotesArea.text = "Pushing parent branch ${branchHistory.parentBranch.name} to remote..."
-            }
+            prNotesText.value = "Pushing parent branch ${branchHistory.parentBranch.name} to remote..."
 
             val parentPushSuccess = gitCommandService.pushBranchToRemote(branchHistory.parentBranch.name)
             if (!parentPushSuccess) {
-                runOnUI {
-                    prNotesArea.text =
-                        "Error: Failed to push parent branch ${branchHistory.parentBranch.name} to remote. Please check your git credentials and try again."
-                    createPRButton.isEnabled = true
-                }
+                prNotesText.value =
+                    "Error: Failed to push parent branch ${branchHistory.parentBranch.name} to remote. Please check your git credentials and try again."
+                isCreatePRButtonEnabled.value = true
                 return true
             }
         }
@@ -276,12 +271,19 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
             appendLine(fileDiff)
             appendLine("```")
             appendLine()
-            appendLine("Please create a well-structured pull request description that includes:")
-            appendLine("1. A clear summary of what was changed")
-            appendLine("2. The motivation or reasoning behind the changes")
-            appendLine("3. Any important implementation details")
-            appendLine("4. Testing considerations (if applicable)")
-            appendLine("5. Any breaking changes or migration notes (if applicable)")
+            appendLine("Please create a concise pull request description that reviewers can quickly scan. Include:")
+            appendLine()
+            appendLine("1. **Summary** (2-3 sentences): What changed and why")
+            appendLine("2. **Key Changes** (bullet points): The main modifications made")
+            appendLine("3. **Breaking Changes** (if any): What needs attention or migration")
+            appendLine()
+            appendLine("Keep it brief - reviewers should understand the PR in under 2 minutes. Avoid:")
+            appendLine("- Detailed implementation explanations")
+            appendLine("- Testing checklists")
+            appendLine("- Code snippets (unless critical for understanding breaking changes)")
+            appendLine("- Extensive architectural discussions")
+            appendLine()
+            appendLine("Focus on WHAT changed and WHY, not HOW it was implemented.")
             appendLine()
             appendLine("Format the response in markdown.")
         }

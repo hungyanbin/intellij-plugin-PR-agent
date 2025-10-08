@@ -1,5 +1,7 @@
 package com.github.hungyanbin.intellijpluginpragent.service
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 
 class GitCommandService(
@@ -74,7 +76,7 @@ class GitCommandService(
         }
     }
 
-    private suspend fun executeGitCommand(commands: List<String>): String {
+    private suspend fun executeGitCommand(commands: List<String>): String = withContext(Dispatchers.IO) {
         val processBuilder = ProcessBuilder(
             commands
         )
@@ -85,7 +87,7 @@ class GitCommandService(
         val errorOutput = process.errorStream.bufferedReader().readText()
         process.waitFor()
 
-        return if (process.exitValue() == 0) {
+        if (process.exitValue() == 0) {
             output
         } else {
             throw RuntimeException("Error ${errorOutput}")
