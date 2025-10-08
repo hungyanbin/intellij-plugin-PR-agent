@@ -1,8 +1,15 @@
 package com.github.hungyanbin.intellijpluginpragent.toolWindow
 
 import com.github.hungyanbin.intellijpluginpragent.service.BranchHistory
+import java.io.File
 
 class PromptTemplateRepository {
+    private val storageFile = File(System.getProperty("user.home"), ".intellij-pr-agent/base-prompt.txt")
+
+    init {
+        // Ensure parent directory exists
+        storageFile.parentFile?.mkdirs()
+    }
 
     fun buildBasePrompt(branchHistory: BranchHistory, fileDiff: String): String {
         val commits = if (branchHistory.commits.isNotEmpty()) {
@@ -33,6 +40,30 @@ class PromptTemplateRepository {
     }
 
     fun getBasePrompt(): String {
+        // Try to load from disk first
+        if (storageFile.exists()) {
+            try {
+                return storageFile.readText()
+            } catch (e: Exception) {
+                // If reading fails, fall back to default
+                e.printStackTrace()
+            }
+        }
+
+        // Return default prompt if file doesn't exist or reading fails
+        return getDefaultBasePrompt()
+    }
+
+    fun updateBasePrompt(newPrompt: String) {
+        try {
+            storageFile.writeText(newPrompt)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            throw e
+        }
+    }
+
+    private fun getDefaultBasePrompt(): String {
         return """
             Please create a concise pull request description that reviewers can quickly scan. Include:
 

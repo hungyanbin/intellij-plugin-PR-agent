@@ -49,6 +49,9 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
     private val _selectedCompareBranch = MutableStateFlow<String?>(null)
     val selectedCompareBranch: StateFlow<String?> = _selectedCompareBranch.asStateFlow()
 
+    private val _basePromptText = MutableStateFlow("")
+    val basePromptText: StateFlow<String> = _basePromptText.asStateFlow()
+
     private var existingPRText = ""
     private var existingPRNumber: Int? = null
     private var existingPRTitle: String? = null
@@ -141,6 +144,11 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
     init {
         loadRecentBranches()
         loadDefaultBranches()
+        loadBasePrompt()
+    }
+
+    private fun loadBasePrompt() {
+        _basePromptText.value = promptTemplateRepository.getBasePrompt()
     }
 
     private fun loadRecentBranches() {
@@ -512,6 +520,17 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
         } catch (e: Exception) {
             _statusMessage.value = "Error modifying PR notes: ${e.message}"
         }
+    }
+
+    fun onUpdateBasePromptClicked(newBasePrompt: String) {
+        if (newBasePrompt.isBlank()) {
+            _statusMessage.value = "Error: Base prompt cannot be empty"
+            return
+        }
+
+        promptTemplateRepository.updateBasePrompt(newBasePrompt)
+        _basePromptText.value = newBasePrompt
+        _statusMessage.value = "Base prompt updated successfully"
     }
 
     fun cleanup() {
