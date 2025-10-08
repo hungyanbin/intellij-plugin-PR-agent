@@ -7,7 +7,6 @@ import com.github.hungyanbin.intellijpluginpragent.service.CreatePRRequest
 import com.github.hungyanbin.intellijpluginpragent.service.GitCommandService
 import com.github.hungyanbin.intellijpluginpragent.service.GitHubAPIService
 import com.github.hungyanbin.intellijpluginpragent.service.GitHubRepository
-import com.github.hungyanbin.intellijpluginpragent.service.PullRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -31,6 +30,12 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
     private val _isCreatePRButtonEnabled = MutableStateFlow(false)
     val isCreatePRButtonEnabled: StateFlow<Boolean> = _isCreatePRButtonEnabled.asStateFlow()
 
+    private val _createPRButtonText = MutableStateFlow("Create PR")
+    val createPRButtonText = _createPRButtonText.asStateFlow()
+
+    private val _isGeneratePRButtonEnabled = MutableStateFlow(true)
+    val isGeneratePRButtonEnabled: StateFlow<Boolean> = _isGeneratePRButtonEnabled.asStateFlow()
+
     private val _recentBranches = MutableStateFlow<List<String>>(emptyList())
     val recentBranches: StateFlow<List<String>> = _recentBranches.asStateFlow()
 
@@ -39,6 +44,10 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
 
     private val _selectedCompareBranch = MutableStateFlow<String?>(null)
     val selectedCompareBranch: StateFlow<String?> = _selectedCompareBranch.asStateFlow()
+
+    private var existingPRText = ""
+    private var existingPRNumber: Int? = null
+    private var existingPRTitle: String? = null
 
     fun onBaseBranchSelected(branchName: String?) {
         _selectedBaseBranch.value = branchName
@@ -91,11 +100,30 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
                         }
                     }
                     _prNotesText.value = prText
-                    _isCreatePRButtonEnabled.value = false
+                    existingPRText = prText
+                    existingPRNumber = existingPR.number
+                    existingPRTitle = existingPR.title
+
+                    // If PR is closed, disable both buttons
+                    // If PR is open, keep buttons enabled so user can modify and update
+                    if (existingPR.state == "closed") {
+                        _isCreatePRButtonEnabled.value = false
+                        _isGeneratePRButtonEnabled.value = false
+                    } else {
+                        // PR is open, enable buttons for modification
+                        _isGeneratePRButtonEnabled.value = true
+                        _isCreatePRButtonEnabled.value = true
+                        _createPRButtonText.value = "Update PR"
+                    }
                 } else {
-                    // No existing PR found, show default message
+                    // No existing PR found, show default message and enable Generate button
                     _prNotesText.value = "Click 'Generate PR Notes' to create pull request notes using AI..."
                     _isCreatePRButtonEnabled.value = false
+                    _isGeneratePRButtonEnabled.value = true
+                    _createPRButtonText.value = "Create PR"
+                    existingPRText = ""
+                    existingPRNumber = null
+                    existingPRTitle = null
                 }
             } catch (e: Exception) {
                 // Silently fail - just don't update the text
@@ -144,7 +172,42 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
 
     fun onCreatePRClicked(currentPRNotes: String) {
         coroutineScope.launch {
-            createPullRequest(currentPRNotes)
+            if (existingPRText.isNotEmpty()) {
+                updatePullRequest(currentPRNotes)
+            } else {
+                createPullRequest(currentPRNotes)
+            }
+        }
+    }
+
+    private suspend fun updatePullRequest(currentPRNotes: String) {
+        val prNumber = existingPRNumber ?: return
+        val title = existingPRTitle ?: return
+        val githubPat = secretRepository.getGithubPat()
+
+        if (githubPat.isNullOrEmpty()) {
+            _prNotesText.value = "Error: Please enter and apply your GitHub PAT in the Config tab"
+            return
+        }
+
+        if (currentPRNotes.isEmpty() || currentPRNotes.contains("Error:") || currentPRNotes.contains("Click 'Generate")) {
+            _prNotesText.value = "Error: Please generate valid PR notes first"
+            return
+        }
+
+        _isCreatePRButtonEnabled.value = false
+        _prNotesText.value = "Updating pull request on GitHub..."
+
+        try {
+            val repository = getGithubRepository() ?: return
+
+            githubAPIService.updatePullRequest(githubPat, repository, prNumber, title, currentPRNotes)
+
+            _prNotesText.value = "✅ Pull request updated successfully!\n\n$currentPRNotes"
+            _isCreatePRButtonEnabled.value = true
+        } catch (e: Exception) {
+            _prNotesText.value = "Error updating pull request: ${e.message}\n\n$currentPRNotes"
+            _isCreatePRButtonEnabled.value = true
         }
     }
 

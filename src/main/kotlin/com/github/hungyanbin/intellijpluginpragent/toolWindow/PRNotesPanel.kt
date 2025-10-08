@@ -34,6 +34,7 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val viewModel = PRNotesPanelViewModel(project.basePath!!)
     private var createPRButton: JButton
+    private var generateButton: JButton
     private val baseBranchComboBox = JComboBox<String>().apply {
         addActionListener {
             viewModel.onBaseBranchSelected(selectedItem as? String)
@@ -96,23 +97,23 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
             gbc.weightx = 1.0
             gbc.fill = GridBagConstraints.NONE
             gbc.anchor = GridBagConstraints.WEST
+            generateButton = JButton("Generate PR Notes").apply {
+                addActionListener {
+                    viewModel.onGeneratePRNotesClicked(
+                        includeClassDiagram = classDiagramCheckBox.isSelected,
+                        includeSequenceDiagram = sequenceDiagramCheckBox.isSelected
+                    )
+                }
+            }
+
+            createPRButton = JButton("Create PR").apply {
+                addActionListener {
+                    viewModel.onCreatePRClicked(plainTextArea.text)
+                }
+                isEnabled = false // Initially disabled until notes are generated
+            }
+
             add(JPanel(FlowLayout(FlowLayout.LEFT, 5, 0)).apply {
-                val generateButton = JButton("Generate PR Notes").apply {
-                    addActionListener {
-                        viewModel.onGeneratePRNotesClicked(
-                            includeClassDiagram = classDiagramCheckBox.isSelected,
-                            includeSequenceDiagram = sequenceDiagramCheckBox.isSelected
-                        )
-                    }
-                }
-
-                createPRButton = JButton("Create PR").apply {
-                    addActionListener {
-                        viewModel.onCreatePRClicked(plainTextArea.text)
-                    }
-                    isEnabled = false // Initially disabled until notes are generated
-                }
-
                 add(generateButton)
                 add(createPRButton)
             }, gbc)
@@ -144,6 +145,10 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
         add(topPanel, BorderLayout.NORTH)
         add(tabbedPane, BorderLayout.CENTER)
 
+        subscribeViewModel()
+    }
+
+    private fun subscribeViewModel() {
         // Collect branch list and populate combo boxes
         coroutineScope.launch {
             viewModel.recentBranches.collect { branches ->
@@ -154,6 +159,15 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
                         baseBranchComboBox.addItem(branch)
                         compareBranchComboBox.addItem(branch)
                     }
+                }
+            }
+        }
+
+        // Observe Generate button enabled state
+        coroutineScope.launch {
+            viewModel.isGeneratePRButtonEnabled.collect { isEnabled ->
+                runOnUI {
+                    generateButton.isEnabled = isEnabled
                 }
             }
         }
@@ -197,6 +211,13 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
             }
         }
 
+        coroutineScope.launch {
+            viewModel.createPRButtonText.collect { text ->
+                runOnUI {
+                    createPRButton.text = text
+                }
+            }
+        }
     }
 
     private fun updateMarkdownPreview(markdownText: String) {
