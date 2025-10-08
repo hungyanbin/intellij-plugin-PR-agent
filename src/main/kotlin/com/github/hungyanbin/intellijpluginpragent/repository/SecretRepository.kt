@@ -1,26 +1,51 @@
 package com.github.hungyanbin.intellijpluginpragent.repository
 
 import com.intellij.credentialStore.CredentialAttributes
-import com.intellij.credentialStore.Credentials
 import com.intellij.ide.passwordSafe.PasswordSafe
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class SecretRepository {
 
     private val anthropicApiKeyAttribute = CredentialAttributes(
-        "IntelliJ Plugin PR Agent",
+        "anthropic",
         "anthropic_api_key"
     )
 
-    fun storeAnthropicApiKey(apiKey: String) {
-        val credentials = Credentials("anthropic_api_key", apiKey)
-        PasswordSafe.instance.set(anthropicApiKeyAttribute, credentials)
+    private val githubPatAttribute = CredentialAttributes(
+        "github",
+        "github_pat"
+    )
+
+    suspend fun storeAnthropicApiKey(apiKey: String) = withContext(Dispatchers.IO) {
+        PasswordSafe.instance.setPassword(anthropicApiKeyAttribute, apiKey)
     }
 
-    fun getAnthropicApiKey(): String? {
-        return PasswordSafe.instance.getPassword(anthropicApiKeyAttribute)
+    suspend fun getAnthropicApiKey(): String? = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val result = PasswordSafe.instance.getPassword(anthropicApiKeyAttribute)
+            result
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
     }
 
-    fun clearAnthropicApiKey() {
-        PasswordSafe.instance.set(anthropicApiKeyAttribute, null)
+    suspend fun storeGithubPat(pat: String) = withContext(Dispatchers.IO) {
+        PasswordSafe.instance.setPassword(githubPatAttribute, pat)
+    }
+
+    suspend fun getGithubPat(): String? = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val result = PasswordSafe.instance.getPassword(githubPatAttribute)
+            result
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    suspend fun clearGithubPat() = withContext(Dispatchers.IO) {
+        PasswordSafe.instance.setPassword(githubPatAttribute, null)
     }
 }

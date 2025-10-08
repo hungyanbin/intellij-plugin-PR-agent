@@ -24,16 +24,6 @@ class GitCommandHelper(
         return Branch(hash = hash, name = branchName)
     }
 
-    //66aa3429be (HEAD -> feat_multipage_player_preview_14, origin/feat_multipage_player_preview_14) feat: stop the player when opening the duration picker
-    //1d4b129af3 feat: introduce PageAnimationFactory.Config to generate evaluator with different constraint
-    //366dd23d48 feat: calculate evaluatorMap if collage has pageDuration
-    //028e16fcf6 refactor: refactor PageAnimationFactory
-    //94c7ad4dad feat: add unit test for PageAnimationFactory
-    //f5b7a09978 (feat_multipage_player_preview_13) fix: MultiPagePlayer is not being recycled when activity is destroyed
-    //72c0be0eb0 feat: apply page duration to json after change from duration picker
-    //bae28f3799 feat: make collage model behaviors correct with new pageDuration property
-    //1f0ca042a4 feat: implement command for pageDuration
-    //522df001f2 feat: Add page_duration to collage structure
     private suspend fun getParentBranch(currentBranch: Branch): Branch {
         return try {
             val output = executeGitCommand(listOf("git", "log", "--oneline", "--decorate"))
@@ -105,6 +95,42 @@ class GitCommandHelper(
             executeGitCommand(listOf("git", "diff", "${fromHash}..${toHash}"))
         } catch (e: Exception) {
             ""
+        }
+    }
+
+    suspend fun getRemoteUrl(): String? {
+        return try {
+            val output = executeGitCommand(listOf("git", "remote", "get-url", "origin"))
+            output.trim().takeIf { it.isNotEmpty() }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun pushCurrentBranchToRemote(branchName: String): Boolean {
+        return try {
+            executeGitCommand(listOf("git", "push", "-u", "origin", branchName))
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    suspend fun checkBranchExistsOnRemote(branchName: String): Boolean {
+        return try {
+            val output = executeGitCommand(listOf("git", "ls-remote", "--heads", "origin", branchName))
+            output.trim().isNotEmpty()
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    suspend fun pushBranchToRemote(branchName: String): Boolean {
+        return try {
+            executeGitCommand(listOf("git", "push", "origin", branchName))
+            true
+        } catch (e: Exception) {
+            false
         }
     }
 }
