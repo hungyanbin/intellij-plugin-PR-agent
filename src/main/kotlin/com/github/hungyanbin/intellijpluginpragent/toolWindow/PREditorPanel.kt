@@ -230,13 +230,22 @@ class PREditorPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
     private fun subscribeViewModel() {
         // Collect branch list and populate combo boxes
         coroutineScope.launch {
-            viewModel.recentBranches.collect { branches ->
+            viewModel.compareBranches.collect { branches ->
                 runOnUI {
-                    baseBranchComboBox.removeAllItems()
                     compareBranchComboBox.removeAllItems()
                     branches.forEach { branch ->
-                        baseBranchComboBox.addItem(branch)
                         compareBranchComboBox.addItem(branch)
+                    }
+                }
+            }
+        }
+
+        coroutineScope.launch {
+            viewModel.baseBranches.collect { branches ->
+                runOnUI {
+                    baseBranchComboBox.removeAllItems()
+                    branches.forEach { branch ->
+                        baseBranchComboBox.addItem(branch)
                     }
                 }
             }

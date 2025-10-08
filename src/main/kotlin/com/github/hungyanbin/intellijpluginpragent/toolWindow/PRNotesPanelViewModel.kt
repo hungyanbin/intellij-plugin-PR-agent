@@ -11,9 +11,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 class PRNotesPanelViewModel(private val projectBasePath: String) {
@@ -41,7 +43,27 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
     val statusMessage: StateFlow<String> = _statusMessage.asStateFlow()
 
     private val _recentBranches = MutableStateFlow<List<String>>(emptyList())
-    val recentBranches: StateFlow<List<String>> = _recentBranches.asStateFlow()
+
+    val compareBranches: Flow<List<String>> = _recentBranches.map { branches ->
+        val currentBranch = gitCommandService.getCurrentBranch()
+        // Add currentBranch branch of current branch if its not in the list
+        if (!branches.contains(currentBranch.name)) {
+            listOf(currentBranch.name) + branches
+        } else {
+            branches
+        }
+    }
+
+    val baseBranches: Flow<List<String>> = _recentBranches.map { branches ->
+        val currentBranch = gitCommandService.getCurrentBranch()
+        val parentBranch = gitCommandService.getParentBranch(currentBranch)
+        // Add parent branch of current branch if its not in the list
+        if (!branches.contains(parentBranch.name)) {
+            listOf(parentBranch.name) + branches
+        } else {
+            branches
+        }
+    }
 
     private val _selectedBaseBranch = MutableStateFlow<String?>(null)
     val selectedBaseBranch: StateFlow<String?> = _selectedBaseBranch.asStateFlow()
