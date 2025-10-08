@@ -18,6 +18,7 @@ import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
 import java.awt.Insets
 import javax.swing.JButton
+import javax.swing.JCheckBox
 import javax.swing.JComboBox
 import javax.swing.JLabel
 import javax.swing.JPanel
@@ -43,6 +44,8 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
             viewModel.onCompareBranchSelected(selectedItem as? String)
         }
     }
+    private val classDiagramCheckBox = JCheckBox("Class Diagram")
+    private val sequenceDiagramCheckBox = JCheckBox("Sequence Diagram")
 
     init {
         layout = BorderLayout()
@@ -74,7 +77,7 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
             gbc.weightx = 1.0
             add(compareBranchComboBox, gbc)
 
-            // Buttons panel - Row 2
+            // Checkboxes panel - Row 2
             gbc.gridx = 0
             gbc.gridy = 2
             gbc.gridwidth = 2
@@ -82,9 +85,24 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
             gbc.fill = GridBagConstraints.NONE
             gbc.anchor = GridBagConstraints.WEST
             add(JPanel(FlowLayout(FlowLayout.LEFT, 5, 0)).apply {
+                add(classDiagramCheckBox)
+                add(sequenceDiagramCheckBox)
+            }, gbc)
+
+            // Buttons panel - Row 3
+            gbc.gridx = 0
+            gbc.gridy = 3
+            gbc.gridwidth = 2
+            gbc.weightx = 1.0
+            gbc.fill = GridBagConstraints.NONE
+            gbc.anchor = GridBagConstraints.WEST
+            add(JPanel(FlowLayout(FlowLayout.LEFT, 5, 0)).apply {
                 val generateButton = JButton("Generate PR Notes").apply {
                     addActionListener {
-                        viewModel.onGeneratePRNotesClicked()
+                        viewModel.onGeneratePRNotesClicked(
+                            includeClassDiagram = classDiagramCheckBox.isSelected,
+                            includeSequenceDiagram = sequenceDiagramCheckBox.isSelected
+                        )
                     }
                 }
 
