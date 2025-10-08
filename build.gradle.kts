@@ -34,6 +34,10 @@ repositories {
 dependencies {
     implementation(libs.kotlinxSerializationJson)
     implementation(libs.koog)
+    implementation(libs.ktorClientCore)
+    implementation(libs.ktorClientCio)
+    implementation(libs.ktorClientContentNegotiation)
+    implementation(libs.ktorSerializationJson)
     testImplementation(libs.junit)
     testImplementation(libs.opentest4j)
 

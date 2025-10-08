@@ -1,10 +1,18 @@
 package com.github.hungyanbin.intellijpluginpragent.service
 
+import io.ktor.client.*
+import io.ktor.client.call.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.request.*
+import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.net.HttpURLConnection
-import java.net.URL
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
+@Serializable
 data class CreatePRRequest(
     val title: String,
     val head: String,
@@ -17,49 +25,43 @@ data class GitHubRepository(
     val name: String
 )
 
+@Serializable
+data class PullRequest(
+    val number: Int,
+    val title: String,
+    val body: String?,
+    val state: String,
+    val html_url: String
+)
+
 class GitHubAPIService {
+    private val client = HttpClient(CIO) {
+        install(ContentNegotiation) {
+            json(Json {
+                ignoreUnknownKeys = true
+                prettyPrint = true
+            })
+        }
+    }
 
     suspend fun createPullRequest(
         githubPat: String,
         repository: GitHubRepository,
         prRequest: CreatePRRequest
     ): String = withContext(Dispatchers.IO) {
-        val apiUrl = "https://api.github.com/repos/${repository.owner}/${repository.name}/pulls"
-        val connection = URL(apiUrl).openConnection() as HttpURLConnection
-
         try {
-            connection.requestMethod = "POST"
-            connection.setRequestProperty("Authorization", "token $githubPat")
-            connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
-            connection.setRequestProperty("Content-Type", "application/json")
-            connection.doOutput = true
-
-            val jsonPayload = """
-                {
-                    "title": "${escapeJson(prRequest.title)}",
-                    "head": "${escapeJson(prRequest.head)}",
-                    "base": "${escapeJson(prRequest.base)}",
-                    "body": "${escapeJson(prRequest.body)}"
+            val response = client.post("https://api.github.com/repos/${repository.owner}/${repository.name}/pulls") {
+                headers {
+                    append(HttpHeaders.Authorization, "token $githubPat")
+                    append(HttpHeaders.Accept, "application/vnd.github.v3+json")
                 }
-            """.trimIndent()
-
-            connection.outputStream.use { outputStream ->
-                outputStream.write(jsonPayload.toByteArray(Charsets.UTF_8))
+                contentType(ContentType.Application.Json)
+                setBody(prRequest)
             }
 
-            val responseCode = connection.responseCode
-            val responseMessage = if (responseCode in 200..299) {
-                connection.inputStream.bufferedReader().use { it.readText() }
-            } else {
-                val errorMessage = connection.errorStream?.bufferedReader()?.use { it.readText() }
-                    ?: "HTTP $responseCode: ${connection.responseMessage}"
-                throw Exception("Failed to create PR: $errorMessage")
-            }
-
-            return@withContext responseMessage
-
-        } finally {
-            connection.disconnect()
+            return@withContext response.body<String>()
+        } catch (e: Exception) {
+            throw Exception("Failed to create PR: ${e.message}", e)
         }
     }
 
@@ -83,11 +85,58 @@ class GitHubAPIService {
         return null
     }
 
-    private fun escapeJson(text: String): String {
-        return text.replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-            .replace("\t", "\\t")
+    suspend fun findExistingPullRequest(
+        githubPat: String,
+        repository: GitHubRepository,
+        head: String,
+        base: String
+    ): PullRequest? = withContext(Dispatchers.IO) {
+        try {
+            val response = client.get("https://api.github.com/repos/${repository.owner}/${repository.name}/pulls") {
+                headers {
+                    append(HttpHeaders.Authorization, "token $githubPat")
+                    append(HttpHeaders.Accept, "application/vnd.github.v3+json")
+                }
+                parameter("head", "${repository.owner}:$head")
+                parameter("base", base)
+                parameter("state", "all")
+            }
+
+            val pullRequests = response.body<List<PullRequest>>()
+            return@withContext pullRequests.firstOrNull()
+        } catch (e: Exception) {
+            // Return null on any error
+            return@withContext null
+        }
+    }
+
+    suspend fun updatePullRequest(
+        githubPat: String,
+        repository: GitHubRepository,
+        prNumber: Int,
+        title: String,
+        body: String
+    ): String = withContext(Dispatchers.IO) {
+        try {
+            val response = client.patch("https://api.github.com/repos/${repository.owner}/${repository.name}/pulls/$prNumber") {
+                headers {
+                    append(HttpHeaders.Authorization, "token $githubPat")
+                    append(HttpHeaders.Accept, "application/vnd.github.v3+json")
+                }
+                contentType(ContentType.Application.Json)
+                setBody(mapOf(
+                    "title" to title,
+                    "body" to body
+                ))
+            }
+
+            return@withContext response.body<String>()
+        } catch (e: Exception) {
+            throw Exception("Failed to update PR: ${e.message}", e)
+        }
+    }
+
+    fun close() {
+        client.close()
     }
 }
