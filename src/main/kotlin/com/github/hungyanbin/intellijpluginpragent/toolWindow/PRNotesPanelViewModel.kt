@@ -298,6 +298,21 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
         _statusMessage.value = "Generating PR notes..."
 
         try {
+            // Fetch latest changes from remote
+            _statusMessage.value = "Fetching latest changes from remote..."
+            if (!gitCommandService.fetchRemote()) {
+                _statusMessage.value = "Warning: Failed to fetch from remote. Continuing with local state..."
+            }
+
+            // Check if base branch is behind remote and pull if necessary
+            if (gitCommandService.isLocalBranchBehindRemote(baseBranchName)) {
+                _statusMessage.value = "Base branch '$baseBranchName' is behind remote. Pulling latest changes..."
+                if (!gitCommandService.pullBranch(baseBranchName)) {
+                    _statusMessage.value = "Error: Failed to pull base branch '$baseBranchName'. The branch may have diverged from remote. Please update it manually with 'git pull origin $baseBranchName' and try again."
+                    return
+                }
+            }
+
             // Get branch info for selected branches
             val baseBranch = gitCommandService.getBranchByName(baseBranchName)
             val compareBranch = gitCommandService.getBranchByName(compareBranchName)

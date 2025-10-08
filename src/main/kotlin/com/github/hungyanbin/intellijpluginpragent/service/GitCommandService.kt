@@ -149,6 +149,54 @@ class GitCommandService(
             false
         }
     }
+
+    suspend fun fetchRemote(): Boolean {
+        return try {
+            executeGitCommand(listOf("git", "fetch", "origin"))
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    suspend fun isLocalBranchBehindRemote(branchName: String): Boolean {
+        return try {
+            val localHash = executeGitCommand(listOf("git", "rev-parse", branchName)).trim()
+            val remoteHash = executeGitCommand(listOf("git", "rev-parse", "origin/$branchName")).trim()
+
+            if (localHash == remoteHash) {
+                return false
+            }
+
+            // Check if local branch is behind remote
+            val behindCount = executeGitCommand(listOf("git", "rev-list", "--count", "$branchName..origin/$branchName")).trim().toIntOrNull() ?: 0
+            behindCount > 0
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    suspend fun pullBranch(branchName: String): Boolean {
+        val currentBranch = getCurrentBranch()
+        return try {
+            // Checkout to the branch we want to pull
+            executeGitCommand(listOf("git", "checkout", branchName))
+
+            // Pull with --ff-only to ensure we only fast-forward, avoiding merge commits
+            executeGitCommand(listOf("git", "pull", "--ff-only", "origin", branchName))
+
+            true
+        } catch (_: Exception) {
+            false
+        } finally {
+            try {
+                // Checkout back to the original branch
+                executeGitCommand(listOf("git", "checkout", currentBranch.name))
+            } catch (_: Exception) {
+                // Ignore errors when trying to recover
+            }
+        }
+    }
 }
 
 data class BranchHistory(
