@@ -27,6 +27,13 @@ class PromptTemplateRepository {
             $fileDiff
             ```
 
+            ${getBasePrompt()}
+
+        """.trimIndent()
+    }
+
+    fun getBasePrompt(): String {
+        return """
             Please create a concise pull request description that reviewers can quickly scan. Include:
 
             1. **Summary** (2-3 sentences): What changed and why
@@ -40,7 +47,6 @@ class PromptTemplateRepository {
             - Extensive architectural discussions
 
             Focus on WHAT changed and WHY, not HOW it was implemented.
-
         """.trimIndent()
     }
 
