@@ -9,11 +9,16 @@ import com.github.hungyanbin.intellijpluginpragent.service.GitHubAPIService
 import com.github.hungyanbin.intellijpluginpragent.service.GitHubRepository
 import com.github.hungyanbin.intellijpluginpragent.utils.runOnUI
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Disposer
+import com.intellij.testFramework.LightVirtualFile
 import com.intellij.ui.components.JBPanel
 import com.intellij.ui.components.JBScrollPane
+import com.intellij.ui.components.JBTabbedPane
 import com.intellij.ui.components.JBTextArea
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.intellij.plugins.markdown.ui.preview.html.MarkdownUtil
+import org.intellij.plugins.markdown.ui.preview.jcef.MarkdownJCEFHtmlPanel
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.FlowLayout
@@ -22,7 +27,12 @@ import javax.swing.JPanel
 
 class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
 
-    private val prNotesArea = JBTextArea()
+    private val plainTextArea = JBTextArea()
+    private val previewPanel = JBPanel<JBPanel<*>>().apply {
+        layout = BorderLayout()
+    }
+    private var markdownPreviewPanel: MarkdownJCEFHtmlPanel? = null
+    private val tabbedPane = JBTabbedPane()
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val agentService = AgentService()
     private val gitCommandService = GitCommandService(project.basePath!!)
@@ -58,22 +68,37 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
             add(createPRButton)
         }
 
-        prNotesArea.apply {
-            isEditable = false
+        plainTextArea.apply {
+            isEditable = true
             text = "Click 'Generate PR Notes' to create pull request notes using AI..."
+            document.addDocumentListener(object : javax.swing.event.DocumentListener {
+                override fun insertUpdate(e: javax.swing.event.DocumentEvent?) {
+                    updateMarkdownPreview(text)
+                }
+                override fun removeUpdate(e: javax.swing.event.DocumentEvent?) {
+                    updateMarkdownPreview(text)
+                }
+                override fun changedUpdate(e: javax.swing.event.DocumentEvent?) {
+                    updateMarkdownPreview(text)
+                }
+            })
         }
 
-        val prScrollPane = JBScrollPane(prNotesArea).apply {
+        val plainTextScrollPane = JBScrollPane(plainTextArea).apply {
             preferredSize = Dimension(400, 300)
         }
 
+        tabbedPane.addTab("Plain Text", plainTextScrollPane)
+        tabbedPane.addTab("Preview", previewPanel)
+
         add(buttonPanel, BorderLayout.NORTH)
-        add(prScrollPane, BorderLayout.CENTER)
+        add(tabbedPane, BorderLayout.CENTER)
 
         coroutineScope.launch {
-            prNotesText.collect {
+            prNotesText.collect { markdownText ->
                 runOnUI {
-                    prNotesArea.text = it
+                    plainTextArea.text = markdownText
+                    updateMarkdownPreview(markdownText)
                 }
             }
         }
@@ -86,6 +111,32 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
             }
         }
 
+    }
+
+    private fun updateMarkdownPreview(markdownText: String) {
+        try {
+            // Create panel on first use
+            if (markdownPreviewPanel == null) {
+                val virtualFile = LightVirtualFile("preview.md", markdownText)
+                val newPanel = MarkdownJCEFHtmlPanel(project, virtualFile)
+
+                previewPanel.add(newPanel.component, BorderLayout.CENTER)
+                markdownPreviewPanel = newPanel
+            }
+
+            // Update existing panel with new content
+            val virtualFile = LightVirtualFile("preview.md", markdownText)
+            val html = MarkdownUtil.generateMarkdownHtml(virtualFile, markdownText, project)
+            markdownPreviewPanel?.setHtml(html, 0)
+        } catch (e: Exception) {
+            // Fallback to plain text if markdown rendering fails
+            val errorArea = JBTextArea("Failed to render markdown preview: ${e.message}")
+            errorArea.isEditable = false
+            previewPanel.removeAll()
+            previewPanel.add(JBScrollPane(errorArea), BorderLayout.CENTER)
+            previewPanel.revalidate()
+            previewPanel.repaint()
+        }
     }
 
     private suspend fun generatePRNotes() {
@@ -121,7 +172,7 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
     private suspend fun createPullRequest() {
         val branchHistory = currentBranchHistory
         val githubPat = secretRepository.getGithubPat()
-        val prNotes = prNotesArea.text
+        val prNotes = plainTextArea.text
 
         if (branchHistory == null) {
             prNotesText.value = "Error: Please generate PR notes first"
@@ -291,5 +342,6 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
 
     fun cleanup() {
         coroutineScope.cancel()
+        markdownPreviewPanel?.let { Disposer.dispose(it) }
     }
 }
