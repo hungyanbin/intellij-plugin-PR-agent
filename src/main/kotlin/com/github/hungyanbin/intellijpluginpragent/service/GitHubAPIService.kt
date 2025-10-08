@@ -34,6 +34,11 @@ data class PullRequest(
     val html_url: String
 )
 
+@Serializable
+data class RepositoryInfo(
+    val default_branch: String
+)
+
 class GitHubAPIService {
     private val client = HttpClient(CIO) {
         install(ContentNegotiation) {
@@ -133,6 +138,25 @@ class GitHubAPIService {
             return@withContext response.body<String>()
         } catch (e: Exception) {
             throw Exception("Failed to update PR: ${e.message}", e)
+        }
+    }
+
+    suspend fun getDefaultBranch(
+        githubPat: String,
+        repository: GitHubRepository
+    ): String = withContext(Dispatchers.IO) {
+        try {
+            val response = client.get("https://api.github.com/repos/${repository.owner}/${repository.name}") {
+                headers {
+                    append(HttpHeaders.Authorization, "token $githubPat")
+                    append(HttpHeaders.Accept, "application/vnd.github.v3+json")
+                }
+            }
+
+            val repoInfo = response.body<RepositoryInfo>()
+            return@withContext repoInfo.default_branch
+        } catch (e: Exception) {
+            throw Exception("Failed to get default branch: ${e.message}", e)
         }
     }
 

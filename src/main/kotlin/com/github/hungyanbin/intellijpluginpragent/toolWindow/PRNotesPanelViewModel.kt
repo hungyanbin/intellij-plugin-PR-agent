@@ -13,9 +13,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class PRNotesPanelViewModel(private val projectBasePath: String) {
@@ -45,25 +48,66 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
     private val _recentBranches = MutableStateFlow<List<String>>(emptyList())
 
     val compareBranches: Flow<List<String>> = _recentBranches.map { branches ->
-        val currentBranch = gitCommandService.getCurrentBranch()
-        // Add currentBranch branch of current branch if its not in the list
-        if (!branches.contains(currentBranch.name)) {
-            listOf(currentBranch.name) + branches
-        } else {
-            branches
-        }
-    }
+        if (branches.isEmpty()) return@map emptyList()
 
-    val baseBranches: Flow<List<String>> = _recentBranches.map { branches ->
+        val currentBranch = gitCommandService.getCurrentBranch()
+
+        // Build the list: current branch first, then recent branches (excluding current)
+        val result = mutableListOf<String>()
+
+        // 1. Add current branch first
+        result.add(currentBranch.name)
+
+        // 2. Add recent branches (excluding current branch)
+        branches.forEach { branch ->
+            if (branch != currentBranch.name) {
+                result.add(branch)
+            }
+        }
+
+        result
+    }.stateIn(coroutineScope, SharingStarted.Eagerly, emptyList())
+
+    val baseBranches: StateFlow<List<String>> = _recentBranches.map { branches ->
+        if (branches.isEmpty()) return@map emptyList()
+
         val currentBranch = gitCommandService.getCurrentBranch()
         val parentBranch = gitCommandService.getParentBranch(currentBranch)
-        // Add parent branch of current branch if its not in the list
-        if (!branches.contains(parentBranch.name)) {
-            listOf(parentBranch.name) + branches
-        } else {
-            branches
+
+        // Try to get default branch from GitHub
+        var defaultBranchName: String? = null
+        try {
+            val githubPat = secretRepository.getGithubPat()
+            if (!githubPat.isNullOrEmpty()) {
+                val repository = getGithubRepository()
+                if (repository != null) {
+                    defaultBranchName = githubAPIService.getDefaultBranch(githubPat, repository)
+                }
+            }
+        } catch (e: Exception) {
+            // Ignore errors, will fallback to branches list
         }
-    }
+
+        // Build the list: parent branch first, then default branch, then recent branches
+        val result = mutableListOf<String>()
+
+        // 1. Add parent branch first
+        result.add(parentBranch.name)
+
+        // 2. Add default branch second (if different from parent)
+        if (defaultBranchName != null && defaultBranchName != parentBranch.name) {
+            result.add(defaultBranchName)
+        }
+
+        // 3. Add recent branches (excluding parent and default branch)
+        branches.forEach { branch ->
+            if (branch != parentBranch.name && branch != defaultBranchName) {
+                result.add(branch)
+            }
+        }
+
+        result
+    }.stateIn(coroutineScope, SharingStarted.Eagerly, emptyList())
 
     private val _selectedBaseBranch = MutableStateFlow<String?>(null)
     val selectedBaseBranch: StateFlow<String?> = _selectedBaseBranch.asStateFlow()
@@ -105,13 +149,7 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
                     return@launch
                 }
 
-                val remoteUrl = gitCommandService.getRemoteUrl()
-                val repository = remoteUrl?.let { githubAPIService.parseGitHubRepository(it) }
-
-                if (repository == null) {
-                    // Could not determine repository, skip check
-                    return@launch
-                }
+                val repository = getGithubRepository() ?: return@launch
 
                 val existingPR = githubAPIService.findExistingPullRequest(
                     githubPat,
@@ -165,7 +203,6 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
 
     init {
         loadRecentBranches()
-        loadDefaultBranches()
         loadBasePrompt()
     }
 
@@ -180,20 +217,6 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
                 _recentBranches.value = branches
             } catch (e: Exception) {
                 _recentBranches.value = emptyList()
-            }
-        }
-    }
-
-    private fun loadDefaultBranches() {
-        coroutineScope.launch {
-            try {
-                val currentBranch = gitCommandService.getCurrentBranch()
-                val parentBranch = gitCommandService.getParentBranch(currentBranch)
-
-                _selectedBaseBranch.value = parentBranch.name
-                _selectedCompareBranch.value = currentBranch.name
-            } catch (e: Exception) {
-                // Ignore errors, branches will remain unselected
             }
         }
     }
