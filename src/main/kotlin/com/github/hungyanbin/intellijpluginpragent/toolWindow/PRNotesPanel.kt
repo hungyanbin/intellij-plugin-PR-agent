@@ -1,7 +1,7 @@
 package com.github.hungyanbin.intellijpluginpragent.toolWindow
 
 import com.github.hungyanbin.intellijpluginpragent.repository.SecretRepository
-import com.github.hungyanbin.intellijpluginpragent.service.AnthropicAPIService
+import com.github.hungyanbin.intellijpluginpragent.service.AgentService
 import com.github.hungyanbin.intellijpluginpragent.service.BranchHistory
 import com.github.hungyanbin.intellijpluginpragent.service.CreatePRRequest
 import com.github.hungyanbin.intellijpluginpragent.service.GitCommandService
@@ -24,7 +24,7 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
 
     private val prNotesArea = JBTextArea()
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private val anthropicAPIService = AnthropicAPIService()
+    private val agentService = AgentService()
     private val gitCommandService = GitCommandService(project.basePath!!)
     private val secretRepository = SecretRepository()
     private val githubAPIService = GitHubAPIService()
@@ -107,7 +107,7 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
                 )
 
                 val prPrompt = buildPRPrompt(branchHistory, fileDiff)
-                val response = anthropicAPIService.callAnthropicAPI(apiKey, prPrompt)
+                val response = agentService.generatePRNotes(apiKey, prPrompt)
 
                 prNotesText.value = response
                 isCreatePRButtonEnabled.value = true

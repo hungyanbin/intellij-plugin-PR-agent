@@ -10,12 +10,14 @@ changelog = "2.4.0"
 intelliJPlatform = "2.9.0"
 kotlin = "2.1.20"
 kover = "0.9.1"
+koog = "0.5.0"
 qodana = "2025.1.1"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 opentest4j = { group = "org.opentest4j", name = "opentest4j", version.ref = "opentest4j" }
 kotlinxSerializationJson = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+koog = { group = "ai.koog", name = "koog-agents", version.ref = "koog"}
 
 [plugins]
 changelog = { id = "org.jetbrains.changelog", version.ref = "changelog" }
