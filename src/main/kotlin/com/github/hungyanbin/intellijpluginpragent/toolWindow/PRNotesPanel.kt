@@ -30,6 +30,12 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
         layout = BorderLayout()
     }
     private var markdownPreviewPanel: MarkdownJCEFHtmlPanel? = null
+    private val basePromptTextArea = JBTextArea().apply {
+        isEditable = true
+        lineWrap = true
+        wrapStyleWord = true
+        text = "Loading base prompt..."
+    }
     private val tabbedPane = JBTabbedPane()
     private val statusLabel = JLabel(" ").apply {
         border = javax.swing.BorderFactory.createEmptyBorder(5, 5, 5, 5)
@@ -142,8 +148,31 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
             preferredSize = Dimension(400, 300)
         }
 
+        // Create Base Prompt tab with text area and update button
+        val basePromptPanel = JBPanel<JBPanel<*>>().apply {
+            layout = BorderLayout()
+
+            val basePromptScrollPane = JBScrollPane(basePromptTextArea).apply {
+                preferredSize = Dimension(400, 300)
+            }
+
+            val updateButton = JButton("Update Base Prompt").apply {
+                addActionListener {
+                    viewModel.onUpdateBasePromptClicked(basePromptTextArea.text)
+                }
+            }
+
+            val buttonPanel = JPanel(FlowLayout(FlowLayout.RIGHT)).apply {
+                add(updateButton)
+            }
+
+            add(basePromptScrollPane, BorderLayout.CENTER)
+            add(buttonPanel, BorderLayout.SOUTH)
+        }
+
         tabbedPane.addTab("Plain Text", plainTextScrollPane)
         tabbedPane.addTab("Preview", previewPanel)
+        tabbedPane.addTab("Base Prompt", basePromptPanel)
 
         // Create center panel with status label and tabbed pane
         val centerPanel = JBPanel<JBPanel<*>>().apply {
@@ -263,6 +292,15 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
             viewModel.statusMessage.collect { message ->
                 runOnUI {
                     statusLabel.text = if (message.isEmpty()) " " else message
+                }
+            }
+        }
+
+        // Observe base prompt text
+        coroutineScope.launch {
+            viewModel.basePromptText.collect { text ->
+                runOnUI {
+                    basePromptTextArea.text = text
                 }
             }
         }
