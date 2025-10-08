@@ -30,6 +30,53 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
     private val _isCreatePRButtonEnabled = MutableStateFlow(false)
     val isCreatePRButtonEnabled: StateFlow<Boolean> = _isCreatePRButtonEnabled.asStateFlow()
 
+    private val _recentBranches = MutableStateFlow<List<String>>(emptyList())
+    val recentBranches: StateFlow<List<String>> = _recentBranches.asStateFlow()
+
+    private val _selectedBaseBranch = MutableStateFlow<String?>(null)
+    val selectedBaseBranch: StateFlow<String?> = _selectedBaseBranch.asStateFlow()
+
+    private val _selectedCompareBranch = MutableStateFlow<String?>(null)
+    val selectedCompareBranch: StateFlow<String?> = _selectedCompareBranch.asStateFlow()
+
+    fun onBaseBranchSelected(branchName: String?) {
+        _selectedBaseBranch.value = branchName
+    }
+
+    fun onCompareBranchSelected(branchName: String?) {
+        _selectedCompareBranch.value = branchName
+    }
+
+    init {
+        loadRecentBranches()
+        loadDefaultBranches()
+    }
+
+    private fun loadRecentBranches() {
+        coroutineScope.launch {
+            try {
+                val branches = gitCommandService.getRecentBranches(10)
+                _recentBranches.value = branches
+            } catch (e: Exception) {
+                _recentBranches.value = emptyList()
+            }
+        }
+    }
+
+    private fun loadDefaultBranches() {
+        coroutineScope.launch {
+            try {
+                val currentBranch = gitCommandService.getCurrentBranch()
+                val parentBranch = gitCommandService.getParentBranch(currentBranch)
+
+                _selectedBaseBranch.value = parentBranch.name
+                _selectedCompareBranch.value = currentBranch.name
+            } catch (e: Exception) {
+                // Ignore errors, branches will remain unselected
+            }
+        }
+    }
+
     fun onGeneratePRNotesClicked() {
         coroutineScope.launch {
             generatePRNotes()
@@ -50,13 +97,44 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
             return
         }
 
+        val baseBranchName = _selectedBaseBranch.value
+        val compareBranchName = _selectedCompareBranch.value
+
+        if (baseBranchName == null || compareBranchName == null) {
+            _prNotesText.value = "Error: Please select both base and compare branches"
+            return
+        }
+
+        if (baseBranchName == compareBranchName) {
+            _prNotesText.value = "Error: Base branch and compare branch cannot be the same"
+            return
+        }
+
         _prNotesText.value = "Generating PR notes..."
 
         try {
-            val branchHistory = gitCommandService.getLatestBranchHistory()
+            // Get branch info for selected branches
+            val baseBranch = gitCommandService.getBranchByName(baseBranchName)
+            val compareBranch = gitCommandService.getBranchByName(compareBranchName)
+
+            // Validate that compare branch is ahead of base branch
+            if (!gitCommandService.isBranchAheadOf(compareBranchName, baseBranchName)) {
+                _prNotesText.value = "Error: Compare branch '$compareBranchName' is not ahead of base branch '$baseBranchName'. Please check your branch selection."
+                return
+            }
+
+            // Get commits between branches
+            val commits = gitCommandService.getCommitsSinceParent(compareBranch, baseBranch)
+
+            val branchHistory = BranchHistory(
+                commits = commits,
+                currentBranch = compareBranch,
+                parentBranch = baseBranch
+            )
+
             val fileDiff = gitCommandService.getFileDiff(
-                branchHistory.parentBranch.hash,
-                branchHistory.currentBranch.hash
+                baseBranch.hash,
+                compareBranch.hash
             )
 
             val prPrompt = buildPRPrompt(branchHistory, fileDiff)

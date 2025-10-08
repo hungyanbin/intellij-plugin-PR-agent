@@ -20,13 +20,13 @@ class GitCommandService(
         )
     }
 
-    private suspend fun getCurrentBranch(): Branch {
+    suspend fun getCurrentBranch(): Branch {
         val branchName = executeGitCommand(listOf("git", "rev-parse", "--abbrev-ref", "HEAD")).trim()
         val hash = executeGitCommand(listOf("git", "rev-parse", "HEAD")).trim()
         return Branch(hash = hash, name = branchName)
     }
 
-    private suspend fun getParentBranch(currentBranch: Branch): Branch {
+    suspend fun getParentBranch(currentBranch: Branch): Branch {
         return try {
             val output = executeGitCommand(listOf("git", "log", "--oneline", "--decorate"))
             val lines = output.trim().split("\n")
@@ -57,7 +57,7 @@ class GitCommandService(
         }
     }
 
-    private suspend fun getCommitsSinceParent(currentBranch: Branch, parentBranch: Branch): List<Commit> {
+    suspend fun getCommitsSinceParent(currentBranch: Branch, parentBranch: Branch): List<Commit> {
         return try {
             val output = executeGitCommand(listOf("git", "log", "${parentBranch.name}..${currentBranch.name}", "--oneline", "--reverse"))
             if (output.trim().isEmpty()) {
@@ -133,6 +133,30 @@ class GitCommandService(
         return try {
             executeGitCommand(listOf("git", "push", "origin", branchName))
             true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    suspend fun getRecentBranches(limit: Int = 10): List<String> {
+        return try {
+            val output = executeGitCommand(listOf("git", "for-each-ref", "--sort=-committerdate", "refs/heads/", "--format=%(refname:short)", "--count=$limit"))
+            output.trim().split("\n").filter { it.isNotEmpty() }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun getBranchByName(branchName: String): Branch {
+        val hash = executeGitCommand(listOf("git", "rev-parse", branchName)).trim()
+        return Branch(hash = hash, name = branchName)
+    }
+
+    suspend fun isBranchAheadOf(compareBranch: String, baseBranch: String): Boolean {
+        return try {
+            val output = executeGitCommand(listOf("git", "rev-list", "--count", "$baseBranch..$compareBranch"))
+            val commitCount = output.trim().toIntOrNull() ?: 0
+            commitCount > 0
         } catch (e: Exception) {
             false
         }
