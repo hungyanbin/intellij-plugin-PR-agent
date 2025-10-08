@@ -8,18 +8,6 @@ class GitCommandService(
     private val projectPath: String
 ) {
 
-    suspend fun getLatestBranchHistory(): BranchHistory {
-        val currentBranch = getCurrentBranch()
-        val parentBranch = getParentBranch(currentBranch)
-        val commits = getCommitsSinceParent(currentBranch, parentBranch)
-
-        return BranchHistory(
-            commits = commits,
-            currentBranch = currentBranch,
-            parentBranch = parentBranch
-        )
-    }
-
     suspend fun getCurrentBranch(): Branch {
         val branchName = executeGitCommand(listOf("git", "rev-parse", "--abbrev-ref", "HEAD")).trim()
         val hash = executeGitCommand(listOf("git", "rev-parse", "HEAD")).trim()
