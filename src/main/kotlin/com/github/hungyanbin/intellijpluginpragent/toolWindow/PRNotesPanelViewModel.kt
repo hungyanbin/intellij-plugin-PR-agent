@@ -36,6 +36,9 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
     private val _isGeneratePRButtonEnabled = MutableStateFlow(true)
     val isGeneratePRButtonEnabled: StateFlow<Boolean> = _isGeneratePRButtonEnabled.asStateFlow()
 
+    private val _statusMessage = MutableStateFlow("")
+    val statusMessage: StateFlow<String> = _statusMessage.asStateFlow()
+
     private val _recentBranches = MutableStateFlow<List<String>>(emptyList())
     val recentBranches: StateFlow<List<String>> = _recentBranches.asStateFlow()
 
@@ -107,6 +110,7 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
                     // If PR is closed, disable both buttons
                     // If PR is open, keep buttons enabled so user can modify and update
                     if (existingPR.state == "closed") {
+                        _statusMessage.value = "PR is closed"
                         _isCreatePRButtonEnabled.value = false
                         _isGeneratePRButtonEnabled.value = false
                     } else {
@@ -114,10 +118,12 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
                         _isGeneratePRButtonEnabled.value = true
                         _isCreatePRButtonEnabled.value = true
                         _createPRButtonText.value = "Update PR"
+                        _statusMessage.value = "Find existing PR, click Update button to update existing description"
                     }
                 } else {
                     // No existing PR found, show default message and enable Generate button
-                    _prNotesText.value = "Click 'Generate PR Notes' to create pull request notes using AI..."
+                    _statusMessage.value = "Click 'Generate PR Notes' to create pull request notes using AI..."
+                    _prNotesText.value = ""
                     _isCreatePRButtonEnabled.value = false
                     _isGeneratePRButtonEnabled.value = true
                     _createPRButtonText.value = "Create PR"
@@ -186,27 +192,27 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
         val githubPat = secretRepository.getGithubPat()
 
         if (githubPat.isNullOrEmpty()) {
-            _prNotesText.value = "Error: Please enter and apply your GitHub PAT in the Config tab"
+            _statusMessage.value = "Error: Please enter and apply your GitHub PAT in the Config tab"
             return
         }
 
         if (currentPRNotes.isEmpty() || currentPRNotes.contains("Error:") || currentPRNotes.contains("Click 'Generate")) {
-            _prNotesText.value = "Error: Please generate valid PR notes first"
+            _statusMessage.value = "Error: Please generate valid PR notes first"
             return
         }
 
         _isCreatePRButtonEnabled.value = false
-        _prNotesText.value = "Updating pull request on GitHub..."
+        _statusMessage.value = "Updating pull request on GitHub..."
 
         try {
             val repository = getGithubRepository() ?: return
 
             githubAPIService.updatePullRequest(githubPat, repository, prNumber, title, currentPRNotes)
 
-            _prNotesText.value = "✅ Pull request updated successfully!\n\n$currentPRNotes"
+            _statusMessage.value = "✅ Pull request updated successfully!"
             _isCreatePRButtonEnabled.value = true
         } catch (e: Exception) {
-            _prNotesText.value = "Error updating pull request: ${e.message}\n\n$currentPRNotes"
+            _statusMessage.value = "Error updating pull request: ${e.message}"
             _isCreatePRButtonEnabled.value = true
         }
     }
@@ -218,7 +224,7 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
         val apiKey = secretRepository.getAnthropicApiKey() ?: ""
 
         if (apiKey.isEmpty()) {
-            _prNotesText.value = "Error: Please enter and apply your Anthropic API key in the Config tab"
+            _statusMessage.value = "Error: Please enter and apply your Anthropic API key in the Config tab"
             return
         }
 
@@ -226,16 +232,16 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
         val compareBranchName = _selectedCompareBranch.value
 
         if (baseBranchName == null || compareBranchName == null) {
-            _prNotesText.value = "Error: Please select both base and compare branches"
+            _statusMessage.value = "Error: Please select both base and compare branches"
             return
         }
 
         if (baseBranchName == compareBranchName) {
-            _prNotesText.value = "Error: Base branch and compare branch cannot be the same"
+            _statusMessage.value = "Error: Base branch and compare branch cannot be the same"
             return
         }
 
-        _prNotesText.value = "Generating PR notes..."
+        _statusMessage.value = "Generating PR notes..."
 
         try {
             // Get branch info for selected branches
@@ -244,7 +250,7 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
 
             // Validate that compare branch is ahead of base branch
             if (!gitCommandService.isBranchAheadOf(compareBranchName, baseBranchName)) {
-                _prNotesText.value = "Error: Compare branch '$compareBranchName' is not ahead of base branch '$baseBranchName'. Please check your branch selection."
+                _statusMessage.value = "Error: Compare branch '$compareBranchName' is not ahead of base branch '$baseBranchName'. Please check your branch selection."
                 return
             }
 
@@ -267,9 +273,10 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
 
             _prNotesText.value = response
             _isCreatePRButtonEnabled.value = true
+            _statusMessage.value = "PR notes generated successfully"
             currentBranchHistory = branchHistory
         } catch (e: Exception) {
-            _prNotesText.value = "Error generating PR notes: ${e.message}"
+            _statusMessage.value = "Error generating PR notes: ${e.message}"
         }
     }
 
@@ -278,35 +285,35 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
         val githubPat = secretRepository.getGithubPat()
 
         if (branchHistory == null) {
-            _prNotesText.value = "Error: Please generate PR notes first"
+            _statusMessage.value = "Error: Please generate PR notes first"
             return
         }
 
         if (githubPat.isNullOrEmpty()) {
-            _prNotesText.value = "Error: Please enter and apply your GitHub PAT in the Config tab"
+            _statusMessage.value = "Error: Please enter and apply your GitHub PAT in the Config tab"
             return
         }
 
         if (prNotes.isEmpty() || prNotes.contains("Error:") || prNotes.contains("Click 'Generate")) {
-            _prNotesText.value = "Error: Please generate valid PR notes first"
+            _statusMessage.value = "Error: Please generate valid PR notes first"
             return
         }
 
         _isCreatePRButtonEnabled.value = false
-        _prNotesText.value = "Creating pull request on GitHub..."
+        _statusMessage.value = "Creating pull request on GitHub..."
 
-        try {
+        try{
             // Check and push parent branch if it doesn't exist on remote
-            _prNotesText.value = "Checking branches on remote..."
+            _statusMessage.value = "Checking branches on remote..."
 
             if (tryPushRemoteBranch(branchHistory)) return
 
             // Push the current branch to remote
-            _prNotesText.value = "Pushing current branch ${branchHistory.currentBranch.name} to remote..."
+            _statusMessage.value = "Pushing current branch ${branchHistory.currentBranch.name} to remote..."
 
             if (tryPushCurrentBranch(branchHistory)) return
 
-            _prNotesText.value = "Creating pull request on GitHub..."
+            _statusMessage.value = "Creating pull request on GitHub..."
 
             val repository = getGithubRepository() ?: return
 
@@ -322,10 +329,10 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
 
             githubAPIService.createPullRequest(githubPat, repository, prRequest)
 
-            _prNotesText.value = "✅ Pull request created successfully!\n\n$prNotes"
+            _statusMessage.value = "✅ Pull request created successfully!"
             _isCreatePRButtonEnabled.value = true
         } catch (e: Exception) {
-            _prNotesText.value = "Error creating pull request: ${e.message}\n\n$prNotes"
+            _statusMessage.value = "Error creating pull request: ${e.message}"
             _isCreatePRButtonEnabled.value = true
         }
     }
@@ -333,14 +340,14 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
     private suspend fun getGithubRepository(): GitHubRepository? {
         val remoteUrl = gitCommandService.getRemoteUrl()
         if (remoteUrl == null) {
-            _prNotesText.value = "Error: Could not determine GitHub repository from git remote"
+            _statusMessage.value = "Error: Could not determine GitHub repository from git remote"
             _isCreatePRButtonEnabled.value = true
             return null
         }
 
         val repository = githubAPIService.parseGitHubRepository(remoteUrl)
         if (repository == null) {
-            _prNotesText.value = "Error: Could not parse GitHub repository from remote URL: $remoteUrl"
+            _statusMessage.value = "Error: Could not parse GitHub repository from remote URL: $remoteUrl"
             _isCreatePRButtonEnabled.value = true
             return null
         }
@@ -351,7 +358,7 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
     private suspend fun tryPushCurrentBranch(branchHistory: BranchHistory): Boolean {
         val pushSuccess = gitCommandService.pushCurrentBranchToRemote(branchHistory.currentBranch.name)
         if (!pushSuccess) {
-            _prNotesText.value =
+            _statusMessage.value =
                 "Error: Failed to push current branch to remote. Please check your git credentials and try again."
             _isCreatePRButtonEnabled.value = true
             return true
@@ -362,11 +369,11 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
     private suspend fun tryPushRemoteBranch(branchHistory: BranchHistory): Boolean {
         val parentBranchExists = gitCommandService.checkBranchExistsOnRemote(branchHistory.parentBranch.name)
         if (!parentBranchExists) {
-            _prNotesText.value = "Pushing parent branch ${branchHistory.parentBranch.name} to remote..."
+            _statusMessage.value = "Pushing parent branch ${branchHistory.parentBranch.name} to remote..."
 
             val parentPushSuccess = gitCommandService.pushBranchToRemote(branchHistory.parentBranch.name)
             if (!parentPushSuccess) {
-                _prNotesText.value =
+                _statusMessage.value =
                     "Error: Failed to push parent branch ${branchHistory.parentBranch.name} to remote. Please check your git credentials and try again."
                 _isCreatePRButtonEnabled.value = true
                 return true
