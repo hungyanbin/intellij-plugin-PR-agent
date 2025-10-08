@@ -33,7 +33,7 @@ import javax.swing.JComboBox
 import javax.swing.JLabel
 import javax.swing.JPanel
 
-class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
+class PREditorPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
 
     private val plainTextArea = JBTextArea()
     private val previewPanel = JBPanel<JBPanel<*>>().apply {
