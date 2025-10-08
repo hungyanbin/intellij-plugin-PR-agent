@@ -46,7 +46,6 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
         wrapStyleWord = true
         text = "Loading base prompt..."
     }
-    private val imageListPanel = ImageListPanel()
     private val tabbedPane = JBTabbedPane()
     private val statusLabel = JLabel(" ").apply {
         border = javax.swing.BorderFactory.createEmptyBorder(5, 5, 5, 5)
@@ -184,7 +183,6 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
 
         tabbedPane.addTab("Plain Text", plainTextScrollPane)
         tabbedPane.addTab("Preview", previewPanel)
-        tabbedPane.addTab("Images", imageListPanel)
         tabbedPane.addTab("Base Prompt", basePromptPanel)
 
         // Create center panel with status label and tabbed pane
@@ -280,7 +278,6 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
                 runOnUI {
                     plainTextArea.text = markdownText
                     updateMarkdownPreview(markdownText)
-                    imageListPanel.updateImages(markdownText)
                 }
             }
         }
@@ -397,6 +394,5 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
         coroutineScope.cancel()
         viewModel.cleanup()
         markdownPreviewPanel?.let { Disposer.dispose(it) }
-        imageListPanel.cleanup()
     }
 }
