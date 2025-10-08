@@ -8,7 +8,7 @@ class GitCommandService(
     private val projectPath: String
 ) {
 
-    suspend fun getBranchHistory(): BranchHistory {
+    suspend fun getLatestBranchHistory(): BranchHistory {
         val currentBranch = getCurrentBranch()
         val parentBranch = getParentBranch(currentBranch)
         val commits = getCommitsSinceParent(currentBranch, parentBranch)
