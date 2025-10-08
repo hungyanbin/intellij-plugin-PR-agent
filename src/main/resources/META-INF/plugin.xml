@@ -10,6 +10,6 @@
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="com.github.hungyanbin.intellijpluginpragent.toolWindow.PRAgentWindowFactory" id="PR agent"/>
+        <toolWindow factoryClass="com.github.hungyanbin.intellijpluginpragent.toolWindow.PRAgentWindowFactory" id="PR agent" icon="META-INF/pluginIcon.svg"/>
     </extensions>
 </idea-plugin>
