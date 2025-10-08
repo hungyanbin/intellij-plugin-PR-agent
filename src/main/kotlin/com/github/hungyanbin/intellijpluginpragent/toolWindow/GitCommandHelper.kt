@@ -32,16 +32,18 @@ class GitCommandHelper(
             // Parse the log output to find branch references
             for (line in lines) {
                 // Look for branch names in parentheses, excluding origin/ and HEAD
-                val branchMatch = Regex("\\(([^,)]+)\\)").findAll(line)
-                for (match in branchMatch) {
-                    val branchRef = match.groupValues[1]
-                    if (!branchRef.contains("HEAD") &&
-                        !branchRef.contains("origin/") &&
-                        branchRef != currentBranch.name &&
-                        branchRef.trim().isNotEmpty()) {
-                        val parentBranchName = branchRef.trim()
-                        val hash = line.split(" ")[0] // Get hash from start of line
-                        return Branch(hash = hash, name = parentBranchName)
+                val branchMatch = Regex("\\(([^)]+)\\)").find(line)
+                if (branchMatch != null) {
+                    val branchRefs = branchMatch.groupValues[1].split(",")
+                    for (branchRef in branchRefs) {
+                        val trimmedRef = branchRef.trim()
+                        if (!trimmedRef.contains("HEAD") &&
+                            !trimmedRef.startsWith("origin/") &&
+                            trimmedRef != currentBranch.name &&
+                            trimmedRef.isNotEmpty()) {
+                            val hash = line.split(" ")[0] // Get hash from start of line
+                            return Branch(hash = hash, name = trimmedRef)
+                        }
                     }
                 }
             }
