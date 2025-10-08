@@ -22,9 +22,10 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
     private val gitCommandService = GitCommandService(projectBasePath)
     private val secretRepository = SecretRepository()
     private val githubAPIService = GitHubAPIService()
+    private val promptTemplateRepository = PromptTemplateRepository()
     private var currentBranchHistory: BranchHistory? = null
 
-    private val _prNotesText = MutableStateFlow("Click 'Generate PR Notes' to create pull request notes using AI...")
+    private val _prNotesText = MutableStateFlow("")
     val prNotesText: StateFlow<String> = _prNotesText.asStateFlow()
 
     private val _isCreatePRButtonEnabled = MutableStateFlow(false)
@@ -168,8 +169,8 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
     }
 
     fun onGeneratePRNotesClicked(
-        includeClassDiagram: Boolean = false,
-        includeSequenceDiagram: Boolean = false
+        includeClassDiagram: Boolean,
+        includeSequenceDiagram: Boolean
     ) {
         coroutineScope.launch {
             generatePRNotes(includeClassDiagram, includeSequenceDiagram)
@@ -218,8 +219,8 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
     }
 
     private suspend fun generatePRNotes(
-        includeClassDiagram: Boolean = false,
-        includeSequenceDiagram: Boolean = false
+        includeClassDiagram: Boolean,
+        includeSequenceDiagram: Boolean
     ) {
         val apiKey = secretRepository.getAnthropicApiKey() ?: ""
 
@@ -411,96 +412,105 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
     private fun buildPRPrompt(
         branchHistory: BranchHistory,
         fileDiff: String,
-        includeClassDiagram: Boolean = false,
-        includeSequenceDiagram: Boolean = false
+        includeClassDiagram: Boolean,
+        includeSequenceDiagram: Boolean
     ): String {
         return buildString {
-            appendLine("Please generate comprehensive pull request notes based on the following git information:")
-            appendLine()
-            appendLine("## Branch Information")
-            appendLine("- Current Branch: ${branchHistory.currentBranch.name}")
-            appendLine("- Parent Branch: ${branchHistory.parentBranch.name}")
-            appendLine()
-
-            if (branchHistory.commits.isNotEmpty()) {
-                appendLine("## Commits")
-                branchHistory.commits.forEach { commit ->
-                    appendLine("- ${commit.hash}: ${commit.description}")
-                }
-                appendLine()
-            }
-
-            appendLine("## Code Changes")
-            appendLine("```")
-            appendLine(fileDiff)
-            appendLine("```")
-            appendLine()
-            appendLine("Please create a concise pull request description that reviewers can quickly scan. Include:")
-            appendLine()
-            appendLine("1. **Summary** (2-3 sentences): What changed and why")
-            appendLine("2. **Key Changes** (bullet points): The main modifications made")
-            appendLine("3. **Breaking Changes** (if any): What needs attention or migration")
-            appendLine()
-            appendLine("Keep it brief - reviewers should understand the PR in under 2 minutes. Avoid:")
-            appendLine("- Detailed implementation explanations")
-            appendLine("- Testing checklists")
-            appendLine("- Code snippets (unless critical for understanding breaking changes)")
-            appendLine("- Extensive architectural discussions")
-            appendLine()
-            appendLine("Focus on WHAT changed and WHY, not HOW it was implemented.")
-            appendLine()
+            append(promptTemplateRepository.buildBasePrompt(branchHistory, fileDiff))
 
             if (includeClassDiagram) {
-                appendLine("4. **Class Diagrams**: Create a set of **concise and meaningful class diagrams** that illustrate the key architectural relationships introduced or modified in this pull request.")
-                appendLine()
-                appendLine("**Objectives:**")
-                appendLine("- Explain *what this change achieves conceptually* (not just which classes exist)")
-                appendLine("- Show *how responsibilities are divided across layers* (e.g. View, ViewModel, Domain, Data)")
-                appendLine("- Prefer clarity over completeness — use multiple small diagrams if needed rather than one large one")
-                appendLine()
-                appendLine("**Guidelines:**")
-                appendLine("1. Identify the **main purpose or feature** affected by this PR (e.g., \"User authentication flow\", \"Image upload pipeline\").")
-                appendLine("2. Create **1–3 focused Mermaid class diagrams**, each addressing a single viewpoint or submodule if appropriate.")
-                appendLine("3. Use **stereotype annotations** inside the class body to indicate the layer. Place `<<View>>`, `<<ViewModel>>`, `<<Domain>>`, or `<<Repository>>` as the first line inside the class braces. Example:")
-                appendLine("   ```")
-                appendLine("   class LoginActivity {")
-                appendLine("       <<View>>")
-                appendLine("       +login() void")
-                appendLine("   }```")
-                appendLine("   Do NOT use stereotypes after the class name like `class LoginActivity <<View>>`")
-                appendLine("4. Show only the **public relationships** and **important methods or dependencies** that help the reader understand the flow of data or control.")
-                appendLine("5. Exclude trivial helpers, framework classes, and generated code.")
-                appendLine()
-                appendLine("**Output Format:**")
-                appendLine("- Each diagram in a separate Mermaid block")
-                appendLine("- Include a short descriptive caption before each diagram, like:")
-                appendLine("  \"_Diagram 1: User login flow across View → ViewModel → Domain layers_\"")
-                appendLine()
+                append(promptTemplateRepository.getClassDiagramPrompt())
             }
 
             if (includeSequenceDiagram) {
-                appendLine("5. **Sequence Diagrams**: Create a set of **concise and meaningful sequence diagrams** that illustrate the key interactions introduced or modified in this pull request.")
-                appendLine()
-                appendLine("**Objectives:**")
-                appendLine("- Explain *what interaction flows this change introduces or modifies*")
-                appendLine("- Show *how components communicate across layers* (e.g. View → ViewModel → Domain → Repository)")
-                appendLine("- Prefer clarity over completeness — use multiple focused diagrams if needed rather than one complex one")
-                appendLine()
-                appendLine("**Guidelines:**")
-                appendLine("1. Identify the **main user flow or system interaction** affected by this PR (e.g., \"User login process\", \"Data sync workflow\").")
-                appendLine("2. Create **1–3 focused Mermaid sequence diagrams**, each showing a single key interaction flow.")
-                appendLine("3. Use **participant labels with layer indicators** like `View: LoginActivity`, `ViewModel: LoginViewModel`, `Repository: UserRepository` to show the architectural layer.")
-                appendLine("4. Show only the **important messages and method calls** that help understand the interaction flow.")
-                appendLine("5. Exclude trivial or internal implementation details that don't affect the understanding of the flow.")
-                appendLine()
-                appendLine("**Output Format:**")
-                appendLine("- Each diagram in a separate Mermaid block")
-                appendLine("- Include a short descriptive caption before each diagram, like:")
-                appendLine("  \"_Diagram 1: User login interaction flow from View to Repository_\"")
-                appendLine()
+                append(promptTemplateRepository.getSequenceDiagramPrompt())
             }
 
             appendLine("Format the response in markdown.")
+        }
+    }
+
+    fun onModifyPRNotesClicked(
+        userPrompt: String,
+        includeClassDiagram: Boolean,
+        includeSequenceDiagram: Boolean
+    ) {
+        coroutineScope.launch {
+            modifyPRNotes(userPrompt, includeClassDiagram, includeSequenceDiagram)
+        }
+    }
+
+    private suspend fun modifyPRNotes(
+        userPrompt: String,
+        includeClassDiagram: Boolean,
+        includeSequenceDiagram: Boolean
+    ) {
+        val apiKey = secretRepository.getAnthropicApiKey() ?: ""
+
+        if (apiKey.isEmpty()) {
+            _statusMessage.value = "Error: Please enter and apply your Anthropic API key in the Config tab"
+            return
+        }
+
+        if (userPrompt.isBlank()) {
+            _statusMessage.value = "Error: Please enter a prompt to modify PR notes"
+            return
+        }
+
+        _statusMessage.value = "Modifying PR notes..."
+
+        try {
+            // Get or create BranchHistory from cache
+            val branchHistory = currentBranchHistory ?: run {
+                val baseBranchName = _selectedBaseBranch.value
+                val compareBranchName = _selectedCompareBranch.value
+
+                if (baseBranchName == null || compareBranchName == null) {
+                    _statusMessage.value = "Error: Please select branches first"
+                    return
+                }
+
+                val baseBranch = gitCommandService.getBranchByName(baseBranchName)
+                val compareBranch = gitCommandService.getBranchByName(compareBranchName)
+                val commits = gitCommandService.getCommitsSinceParent(compareBranch, baseBranch)
+
+                BranchHistory(
+                    commits = commits,
+                    currentBranch = compareBranch,
+                    parentBranch = baseBranch
+                ).also {
+                    currentBranchHistory = it
+                }
+            }
+
+            val fileDiff = gitCommandService.getFileDiff(
+                branchHistory.parentBranch.hash,
+                branchHistory.currentBranch.hash
+            )
+
+            val basePRPrompt = buildPRPrompt(branchHistory, fileDiff, includeClassDiagram, includeSequenceDiagram)
+            val currentPRContent = _prNotesText.value
+
+            val combinedPrompt = """
+                $basePRPrompt
+
+                Current PR Notes:
+                ```
+                $currentPRContent
+                ```
+
+                User Request:
+                $userPrompt
+
+                Please modify the PR notes according to the user's request while maintaining the overall structure and clarity.
+            """.trimIndent()
+
+            val response = agentService.generatePRNotes(apiKey, combinedPrompt)
+
+            _prNotesText.value = response
+            _statusMessage.value = "PR notes modified successfully"
+        } catch (e: Exception) {
+            _statusMessage.value = "Error modifying PR notes: ${e.message}"
         }
     }
 
