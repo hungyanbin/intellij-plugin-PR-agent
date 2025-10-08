@@ -152,8 +152,36 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
             add(statusLabel, BorderLayout.SOUTH)
         }
 
+        // Create bottom panel with prompt input area and send button
+        val bottomPanel = JPanel(BorderLayout()).apply {
+            border = javax.swing.BorderFactory.createEmptyBorder(5, 5, 5, 5)
+
+            val promptTextArea = JBTextArea().apply {
+                lineWrap = true
+                wrapStyleWord = true
+                rows = 3
+                text = "Enter prompt to modify PR content..."
+            }
+
+            val promptScrollPane = JBScrollPane(promptTextArea).apply {
+                preferredSize = Dimension(400, 80)
+            }
+
+            val sendButton = JButton("Send").apply {
+                addActionListener {
+                    val prompt = promptTextArea.text
+                    // TODO: Integrate with Agent
+                    println("Prompt: $prompt")
+                }
+            }
+
+            add(promptScrollPane, BorderLayout.CENTER)
+            add(sendButton, BorderLayout.EAST)
+        }
+
         add(topPanel, BorderLayout.NORTH)
         add(centerPanel, BorderLayout.CENTER)
+        add(bottomPanel, BorderLayout.SOUTH)
 
         subscribeViewModel()
     }
