@@ -25,7 +25,7 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
     private val promptTemplateRepository = PromptTemplateRepository()
     private var currentBranchHistory: BranchHistory? = null
 
-    private val _prNotesText = MutableStateFlow("Click 'Generate PR Notes' to create pull request notes using AI...")
+    private val _prNotesText = MutableStateFlow("")
     val prNotesText: StateFlow<String> = _prNotesText.asStateFlow()
 
     private val _isCreatePRButtonEnabled = MutableStateFlow(false)
@@ -169,8 +169,8 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
     }
 
     fun onGeneratePRNotesClicked(
-        includeClassDiagram: Boolean = false,
-        includeSequenceDiagram: Boolean = false
+        includeClassDiagram: Boolean,
+        includeSequenceDiagram: Boolean
     ) {
         coroutineScope.launch {
             generatePRNotes(includeClassDiagram, includeSequenceDiagram)
@@ -219,8 +219,8 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
     }
 
     private suspend fun generatePRNotes(
-        includeClassDiagram: Boolean = false,
-        includeSequenceDiagram: Boolean = false
+        includeClassDiagram: Boolean,
+        includeSequenceDiagram: Boolean
     ) {
         val apiKey = secretRepository.getAnthropicApiKey() ?: ""
 
@@ -412,8 +412,8 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
     private fun buildPRPrompt(
         branchHistory: BranchHistory,
         fileDiff: String,
-        includeClassDiagram: Boolean = false,
-        includeSequenceDiagram: Boolean = false
+        includeClassDiagram: Boolean,
+        includeSequenceDiagram: Boolean
     ): String {
         return buildString {
             append(promptTemplateRepository.buildBasePrompt(branchHistory, fileDiff))
@@ -427,6 +427,90 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
             }
 
             appendLine("Format the response in markdown.")
+        }
+    }
+
+    fun onModifyPRNotesClicked(
+        userPrompt: String,
+        includeClassDiagram: Boolean,
+        includeSequenceDiagram: Boolean
+    ) {
+        coroutineScope.launch {
+            modifyPRNotes(userPrompt, includeClassDiagram, includeSequenceDiagram)
+        }
+    }
+
+    private suspend fun modifyPRNotes(
+        userPrompt: String,
+        includeClassDiagram: Boolean,
+        includeSequenceDiagram: Boolean
+    ) {
+        val apiKey = secretRepository.getAnthropicApiKey() ?: ""
+
+        if (apiKey.isEmpty()) {
+            _statusMessage.value = "Error: Please enter and apply your Anthropic API key in the Config tab"
+            return
+        }
+
+        if (userPrompt.isBlank()) {
+            _statusMessage.value = "Error: Please enter a prompt to modify PR notes"
+            return
+        }
+
+        _statusMessage.value = "Modifying PR notes..."
+
+        try {
+            // Get or create BranchHistory from cache
+            val branchHistory = currentBranchHistory ?: run {
+                val baseBranchName = _selectedBaseBranch.value
+                val compareBranchName = _selectedCompareBranch.value
+
+                if (baseBranchName == null || compareBranchName == null) {
+                    _statusMessage.value = "Error: Please select branches first"
+                    return
+                }
+
+                val baseBranch = gitCommandService.getBranchByName(baseBranchName)
+                val compareBranch = gitCommandService.getBranchByName(compareBranchName)
+                val commits = gitCommandService.getCommitsSinceParent(compareBranch, baseBranch)
+
+                BranchHistory(
+                    commits = commits,
+                    currentBranch = compareBranch,
+                    parentBranch = baseBranch
+                ).also {
+                    currentBranchHistory = it
+                }
+            }
+
+            val fileDiff = gitCommandService.getFileDiff(
+                branchHistory.parentBranch.hash,
+                branchHistory.currentBranch.hash
+            )
+
+            val basePRPrompt = buildPRPrompt(branchHistory, fileDiff, includeClassDiagram, includeSequenceDiagram)
+            val currentPRContent = _prNotesText.value
+
+            val combinedPrompt = """
+                $basePRPrompt
+
+                Current PR Notes:
+                ```
+                $currentPRContent
+                ```
+
+                User Request:
+                $userPrompt
+
+                Please modify the PR notes according to the user's request while maintaining the overall structure and clarity.
+            """.trimIndent()
+
+            val response = agentService.generatePRNotes(apiKey, combinedPrompt)
+
+            _prNotesText.value = response
+            _statusMessage.value = "PR notes modified successfully"
+        } catch (e: Exception) {
+            _statusMessage.value = "Error modifying PR notes: ${e.message}"
         }
     }
 
