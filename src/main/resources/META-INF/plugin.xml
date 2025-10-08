@@ -10,7 +10,6 @@
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="com.github.hungyanbin.intellijpluginpragent.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
-        <postStartupActivity implementation="com.github.hungyanbin.intellijpluginpragent.startup.MyProjectActivity" />
+        <toolWindow factoryClass="com.github.hungyanbin.intellijpluginpragent.toolWindow.PRAgentWindowFactory" id="PR agent"/>
     </extensions>
 </idea-plugin>
