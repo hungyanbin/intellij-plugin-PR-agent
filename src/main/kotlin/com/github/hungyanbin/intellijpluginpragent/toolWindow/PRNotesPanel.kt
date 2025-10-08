@@ -31,6 +31,9 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
     }
     private var markdownPreviewPanel: MarkdownJCEFHtmlPanel? = null
     private val tabbedPane = JBTabbedPane()
+    private val statusLabel = JLabel(" ").apply {
+        border = javax.swing.BorderFactory.createEmptyBorder(5, 5, 5, 5)
+    }
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val viewModel = PRNotesPanelViewModel(project.basePath!!)
     private var createPRButton: JButton
@@ -142,8 +145,15 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
         tabbedPane.addTab("Plain Text", plainTextScrollPane)
         tabbedPane.addTab("Preview", previewPanel)
 
+        // Create center panel with status label and tabbed pane
+        val centerPanel = JBPanel<JBPanel<*>>().apply {
+            layout = BorderLayout()
+            add(tabbedPane, BorderLayout.CENTER)
+            add(statusLabel, BorderLayout.SOUTH)
+        }
+
         add(topPanel, BorderLayout.NORTH)
-        add(tabbedPane, BorderLayout.CENTER)
+        add(centerPanel, BorderLayout.CENTER)
 
         subscribeViewModel()
     }
@@ -215,6 +225,15 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
             viewModel.createPRButtonText.collect { text ->
                 runOnUI {
                     createPRButton.text = text
+                }
+            }
+        }
+
+        // Observe status message
+        coroutineScope.launch {
+            viewModel.statusMessage.collect { message ->
+                runOnUI {
+                    statusLabel.text = if (message.isEmpty()) " " else message
                 }
             }
         }
