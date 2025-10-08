@@ -1,8 +1,8 @@
-package com.github.hungyanbin.intellijpluginpragent.toolWindow
+package com.github.hungyanbin.intellijpluginpragent.service
 
 import java.io.File
 
-class GitCommandHelper(
+class GitCommandService(
     private val projectPath: String
 ) {
 

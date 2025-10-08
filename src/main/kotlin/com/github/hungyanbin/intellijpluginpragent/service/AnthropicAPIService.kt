@@ -1,4 +1,4 @@
-package com.github.hungyanbin.intellijpluginpragent.toolWindow
+package com.github.hungyanbin.intellijpluginpragent.service
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
