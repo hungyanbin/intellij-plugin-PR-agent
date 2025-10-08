@@ -11,9 +11,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class PRNotesPanelViewModel(private val projectBasePath: String) {
@@ -41,7 +46,68 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
     val statusMessage: StateFlow<String> = _statusMessage.asStateFlow()
 
     private val _recentBranches = MutableStateFlow<List<String>>(emptyList())
-    val recentBranches: StateFlow<List<String>> = _recentBranches.asStateFlow()
+
+    val compareBranches: Flow<List<String>> = _recentBranches.map { branches ->
+        if (branches.isEmpty()) return@map emptyList()
+
+        val currentBranch = gitCommandService.getCurrentBranch()
+
+        // Build the list: current branch first, then recent branches (excluding current)
+        val result = mutableListOf<String>()
+
+        // 1. Add current branch first
+        result.add(currentBranch.name)
+
+        // 2. Add recent branches (excluding current branch)
+        branches.forEach { branch ->
+            if (branch != currentBranch.name) {
+                result.add(branch)
+            }
+        }
+
+        result
+    }.stateIn(coroutineScope, SharingStarted.Eagerly, emptyList())
+
+    val baseBranches: StateFlow<List<String>> = _recentBranches.map { branches ->
+        if (branches.isEmpty()) return@map emptyList()
+
+        val currentBranch = gitCommandService.getCurrentBranch()
+        val parentBranch = gitCommandService.getParentBranch(currentBranch)
+
+        // Try to get default branch from GitHub
+        var defaultBranchName: String? = null
+        try {
+            val githubPat = secretRepository.getGithubPat()
+            if (!githubPat.isNullOrEmpty()) {
+                val repository = getGithubRepository()
+                if (repository != null) {
+                    defaultBranchName = githubAPIService.getDefaultBranch(githubPat, repository)
+                }
+            }
+        } catch (e: Exception) {
+            // Ignore errors, will fallback to branches list
+        }
+
+        // Build the list: parent branch first, then default branch, then recent branches
+        val result = mutableListOf<String>()
+
+        // 1. Add parent branch first
+        result.add(parentBranch.name)
+
+        // 2. Add default branch second (if different from parent)
+        if (defaultBranchName != null && defaultBranchName != parentBranch.name) {
+            result.add(defaultBranchName)
+        }
+
+        // 3. Add recent branches (excluding parent and default branch)
+        branches.forEach { branch ->
+            if (branch != parentBranch.name && branch != defaultBranchName) {
+                result.add(branch)
+            }
+        }
+
+        result
+    }.stateIn(coroutineScope, SharingStarted.Eagerly, emptyList())
 
     private val _selectedBaseBranch = MutableStateFlow<String?>(null)
     val selectedBaseBranch: StateFlow<String?> = _selectedBaseBranch.asStateFlow()
@@ -83,13 +149,7 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
                     return@launch
                 }
 
-                val remoteUrl = gitCommandService.getRemoteUrl()
-                val repository = remoteUrl?.let { githubAPIService.parseGitHubRepository(it) }
-
-                if (repository == null) {
-                    // Could not determine repository, skip check
-                    return@launch
-                }
+                val repository = getGithubRepository() ?: return@launch
 
                 val existingPR = githubAPIService.findExistingPullRequest(
                     githubPat,
@@ -143,7 +203,6 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
 
     init {
         loadRecentBranches()
-        loadDefaultBranches()
         loadBasePrompt()
     }
 
@@ -158,20 +217,6 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
                 _recentBranches.value = branches
             } catch (e: Exception) {
                 _recentBranches.value = emptyList()
-            }
-        }
-    }
-
-    private fun loadDefaultBranches() {
-        coroutineScope.launch {
-            try {
-                val currentBranch = gitCommandService.getCurrentBranch()
-                val parentBranch = gitCommandService.getParentBranch(currentBranch)
-
-                _selectedBaseBranch.value = parentBranch.name
-                _selectedCompareBranch.value = currentBranch.name
-            } catch (e: Exception) {
-                // Ignore errors, branches will remain unselected
             }
         }
     }
@@ -253,6 +298,21 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
         _statusMessage.value = "Generating PR notes..."
 
         try {
+            // Fetch latest changes from remote
+            _statusMessage.value = "Fetching latest changes from remote..."
+            if (!gitCommandService.fetchRemote()) {
+                _statusMessage.value = "Warning: Failed to fetch from remote. Continuing with local state..."
+            }
+
+            // Check if base branch is behind remote and pull if necessary
+            if (gitCommandService.isLocalBranchBehindRemote(baseBranchName)) {
+                _statusMessage.value = "Base branch '$baseBranchName' is behind remote. Pulling latest changes..."
+                if (!gitCommandService.pullBranch(baseBranchName)) {
+                    _statusMessage.value = "Error: Failed to pull base branch '$baseBranchName'. The branch may have diverged from remote. Please update it manually with 'git pull origin $baseBranchName' and try again."
+                    return
+                }
+            }
+
             // Get branch info for selected branches
             val baseBranch = gitCommandService.getBranchByName(baseBranchName)
             val compareBranch = gitCommandService.getBranchByName(compareBranchName)

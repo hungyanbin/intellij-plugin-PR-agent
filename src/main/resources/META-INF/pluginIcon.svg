@@ -1,0 +1,10 @@
+<!-- Copyright 2000-2024 JetBrains s.r.o. and contributors. Use of this source code is governed by the Apache 2.0 license. -->
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+<circle cx="3.75" cy="12" r="2" stroke="#6C707E"/>
+<circle cx="3.75" cy="4" r="2" stroke="#6C707E"/>
+<path d="M3.75 6L3.75 10" stroke="#6C707E"/>
+<path d="M12.25 10L12.25 5.6C12.25 4.71634 11.5337 4 10.65 4L8 4" stroke="#3B82F6"/>
+<path d="M9.75 6L7.75 4L9.75 2" stroke="#3B82F6" stroke-linecap="round"/>
+<!-- Magic star (replacing bottom right circle) -->
+<path d="M12.25 9.5L12.95 11.3L14.75 12L12.95 12.7L12.25 14.5L11.55 12.7L9.75 12L11.55 11.3L12.25 9.5Z" stroke="#3B82F6" stroke-linejoin="round"/>
+</svg>
