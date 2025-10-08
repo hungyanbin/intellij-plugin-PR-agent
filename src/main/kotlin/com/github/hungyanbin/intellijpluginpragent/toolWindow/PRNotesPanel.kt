@@ -1,5 +1,6 @@
 package com.github.hungyanbin.intellijpluginpragent.toolWindow
 
+import com.github.hungyanbin.intellijpluginpragent.repository.SecretRepository
 import com.github.hungyanbin.intellijpluginpragent.utils.runOnUI
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
@@ -8,7 +9,16 @@ import com.intellij.ui.components.JBPanel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTabbedPane
 import com.intellij.ui.components.JBTextArea
+import com.intellij.ui.jcef.JBCefBrowser
 import kotlinx.coroutines.*
+import kotlinx.coroutines.runBlocking
+import org.cef.browser.CefBrowser
+import org.cef.browser.CefFrame
+import org.cef.handler.CefRequestHandlerAdapter
+import org.cef.handler.CefResourceRequestHandler
+import org.cef.handler.CefResourceRequestHandlerAdapter
+import org.cef.misc.BoolRef
+import org.cef.network.CefRequest
 import org.intellij.plugins.markdown.ui.preview.html.MarkdownUtil
 import org.intellij.plugins.markdown.ui.preview.jcef.MarkdownJCEFHtmlPanel
 import java.awt.BorderLayout
@@ -43,6 +53,7 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
     }
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val viewModel = PRNotesPanelViewModel(project.basePath!!)
+    private val secretRepository = SecretRepository()
     private var createPRButton: JButton
     private var generateButton: JButton
     private val baseBranchComboBox = JComboBox<String>().apply {
@@ -314,10 +325,11 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
             // Create panel on first use
             if (markdownPreviewPanel == null) {
                 val virtualFile = LightVirtualFile("preview.md", markdownText)
-                val newPanel = MarkdownJCEFHtmlPanel(project, virtualFile)
+                val markdownPanel = MarkdownJCEFHtmlPanel(project, virtualFile)
+                injectGithubAuthorization(markdownPanel)
 
-                previewPanel.add(newPanel.component, BorderLayout.CENTER)
-                markdownPreviewPanel = newPanel
+                previewPanel.add(markdownPanel.component, BorderLayout.CENTER)
+                markdownPreviewPanel = markdownPanel
             }
 
             // Update existing panel with new content
@@ -332,6 +344,52 @@ class PRNotesPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
             previewPanel.add(JBScrollPane(errorArea), BorderLayout.CENTER)
             previewPanel.revalidate()
             previewPanel.repaint()
+        }
+    }
+
+    private fun injectGithubAuthorization(newPanel: MarkdownJCEFHtmlPanel) {
+        try {
+            val jcefBrowser = newPanel as? JBCefBrowser
+
+            jcefBrowser?.jbCefClient?.addRequestHandler(object : CefRequestHandlerAdapter() {
+                override fun getResourceRequestHandler(
+                    browser: CefBrowser?,
+                    frame: CefFrame?,
+                    request: CefRequest?,
+                    isNavigation: Boolean,
+                    isDownload: Boolean,
+                    requestInitiator: String?,
+                    disableDefaultHandling: BoolRef?
+                ): CefResourceRequestHandler {
+                    return object : CefResourceRequestHandlerAdapter() {
+                        override fun onBeforeResourceLoad(
+                            browser: CefBrowser?,
+                            frame: CefFrame?,
+                            request: CefRequest?
+                        ): Boolean {
+                            request?.let { req ->
+                                println("request: ${req.url}")
+                                val url = req.url
+                                // Add GitHub PAT for GitHub-hosted images
+                                if (url.contains("github.com") || url.contains("githubusercontent.com")) {
+                                    val githubPat = runBlocking { secretRepository.getGithubPat() }
+                                    if (!githubPat.isNullOrEmpty()) {
+                                        val headerMap = mutableMapOf<String, String>()
+                                        req.getHeaderMap(headerMap)
+                                        headerMap["Authorization"] = "token $githubPat"
+                                        req.setHeaderMap(headerMap)
+                                        println("Authorization added: ${headerMap}")
+                                    }
+                                }
+                            }
+                            return false // false means continue with the request
+                        }
+                    }
+                }
+            }, jcefBrowser.cefBrowser)
+        } catch (e: Exception) {
+            // Silently fail if we can't access the browser - preview will still work without auth
+            println("Failed to add request handler: ${e.stackTraceToString()}")
         }
     }
 
