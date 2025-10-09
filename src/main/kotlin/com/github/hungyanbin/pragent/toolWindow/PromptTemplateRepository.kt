@@ -1,6 +1,6 @@
-package com.github.hungyanbin.intellijpluginpragent.toolWindow
+package com.github.hungyanbin.pragent.toolWindow
 
-import com.github.hungyanbin.intellijpluginpragent.service.BranchHistory
+import com.github.hungyanbin.pragent.service.BranchHistory
 import java.io.File
 
 class PromptTemplateRepository {

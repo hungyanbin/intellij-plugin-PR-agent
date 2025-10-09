@@ -1,4 +1,4 @@
-package com.github.hungyanbin.intellijpluginpragent.service
+package com.github.hungyanbin.pragent.service
 
 import ai.koog.agents.core.agent.AIAgent
 import ai.koog.prompt.executor.clients.anthropic.AnthropicModels

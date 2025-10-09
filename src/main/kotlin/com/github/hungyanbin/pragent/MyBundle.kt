@@ -1,4 +1,4 @@
-package com.github.hungyanbin.intellijpluginpragent
+package com.github.hungyanbin.pragent
 
 import com.intellij.DynamicBundle
 import org.jetbrains.annotations.NonNls

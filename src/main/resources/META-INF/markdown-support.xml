@@ -1,0 +1,4 @@
+<!-- Optional Markdown plugin support -->
+<idea-plugin>
+    <!-- This file is loaded only if the Markdown plugin is available -->
+</idea-plugin>

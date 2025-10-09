@@ -1,4 +1,4 @@
-package com.github.hungyanbin.intellijpluginpragent.repository
+package com.github.hungyanbin.pragent.repository
 
 import com.intellij.credentialStore.CredentialAttributes
 import com.intellij.ide.passwordSafe.PasswordSafe

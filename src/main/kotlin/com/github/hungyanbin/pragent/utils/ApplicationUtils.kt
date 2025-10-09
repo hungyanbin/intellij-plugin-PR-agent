@@ -1,4 +1,4 @@
-package com.github.hungyanbin.intellijpluginpragent.utils
+package com.github.hungyanbin.pragent.utils
 
 import com.intellij.openapi.application.ApplicationManager
 

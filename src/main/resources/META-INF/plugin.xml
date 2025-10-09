@@ -1,15 +1,35 @@
 <!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
-    <id>com.github.hungyanbin.intellijpluginpragent</id>
-    <name>intellij-plugin-PR-agent</name>
+    <id>com.github.hungyanbin.pragent</id>
+    <name>PR-agent</name>
     <vendor>hungyanbin</vendor>
 
+    <description><![CDATA[
+    <p>AI-powered assistant for generating concise and comprehensive pull request descriptions.</p>
+
+    <h3>Features</h3>
+    <ul>
+      <li><strong>AI Assistant</strong> - Automatically generates concise PR descriptions based on your code changes</li>
+      <li><strong>Markdown Preview</strong> - Real-time preview of your PR description with full markdown support (requires Markdown plugin)</li>
+      <li><strong>Mermaid Diagram Generation</strong> - Automatically generates class diagrams and sequence diagrams to visualize your changes</li>
+      <li><strong>Interactive Modification</strong> - Refine your PR description through conversational text input</li>
+      <li><strong>Configurable Base Prompt</strong> - Customize the base prompt to tailor PR descriptions to your team's style and requirements</li>
+    </ul>
+
+    <h3>Requirements</h3>
+    <ul>
+      <li>For markdown preview in Android Studio: Requires JBR with JCEF support</li>
+      <li>Mermaid plugin (optional) - Required to render diagrams in preview</li>
+    </ul>
+    ]]></description>
+
     <depends>com.intellij.modules.platform</depends>
-    <depends>org.intellij.plugins.markdown</depends>
+    <depends optional="true" config-file="markdown-support.xml">org.intellij.plugins.markdown</depends>
+    <depends>com.intellij.modules.lang</depends>
 
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="com.github.hungyanbin.intellijpluginpragent.toolWindow.PRAgentWindowFactory" id="PR agent" icon="META-INF/pluginIcon.svg"/>
+        <toolWindow factoryClass="com.github.hungyanbin.pragent.toolWindow.PRAgentWindowFactory" id="PR agent" icon="META-INF/pluginIcon.svg"/>
     </extensions>
 </idea-plugin>
