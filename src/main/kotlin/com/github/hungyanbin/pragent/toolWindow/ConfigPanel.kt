@@ -1,7 +1,7 @@
-package com.github.hungyanbin.intellijpluginpragent.toolWindow
+package com.github.hungyanbin.pragent.toolWindow
 
-import com.github.hungyanbin.intellijpluginpragent.repository.SecretRepository
-import com.github.hungyanbin.intellijpluginpragent.utils.runOnUI
+import com.github.hungyanbin.pragent.repository.SecretRepository
+import com.github.hungyanbin.pragent.utils.runOnUI
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPanel
 import com.intellij.ui.components.JBTextArea

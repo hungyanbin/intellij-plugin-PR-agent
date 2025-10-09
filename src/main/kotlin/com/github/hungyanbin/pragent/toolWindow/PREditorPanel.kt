@@ -1,7 +1,7 @@
-package com.github.hungyanbin.intellijpluginpragent.toolWindow
+package com.github.hungyanbin.pragent.toolWindow
 
-import com.github.hungyanbin.intellijpluginpragent.repository.SecretRepository
-import com.github.hungyanbin.intellijpluginpragent.utils.runOnUI
+import com.github.hungyanbin.pragent.repository.SecretRepository
+import com.github.hungyanbin.pragent.utils.runOnUI
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.testFramework.LightVirtualFile
@@ -9,6 +9,7 @@ import com.intellij.ui.components.JBPanel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTabbedPane
 import com.intellij.ui.components.JBTextArea
+import com.intellij.ui.jcef.JBCefApp
 import com.intellij.ui.jcef.JBCefBrowser
 import kotlinx.coroutines.*
 import kotlinx.coroutines.runBlocking
@@ -328,6 +329,18 @@ class PREditorPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
 
     private fun updateMarkdownPreview(markdownText: String) {
         try {
+            // Check if markdown plugin is available
+            if (!isMarkdownPluginAvailable()) {
+                showMarkdownPluginNotAvailableMessage()
+                return
+            }
+
+            // Check if JCEF is supported
+            if (!JBCefApp.isSupported()) {
+                showJCEFNotSupportedMessage()
+                return
+            }
+
             // Create panel on first use
             if (markdownPreviewPanel == null) {
                 val virtualFile = LightVirtualFile("preview.md", markdownText)
@@ -351,6 +364,64 @@ class PREditorPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
             previewPanel.revalidate()
             previewPanel.repaint()
         }
+    }
+
+    private fun isMarkdownPluginAvailable(): Boolean {
+        return try {
+            Class.forName("org.intellij.plugins.markdown.ui.preview.jcef.MarkdownJCEFHtmlPanel")
+            true
+        } catch (e: ClassNotFoundException) {
+            false
+        }
+    }
+
+    private fun showMarkdownPluginNotAvailableMessage() {
+        val messageArea = JBTextArea().apply {
+            isEditable = false
+            lineWrap = true
+            wrapStyleWord = true
+            text = """
+                Markdown Preview Unavailable
+
+                The Markdown plugin is not installed or enabled.
+
+                To enable preview:
+                1. Go to Settings → Plugins
+                2. Search for "Markdown" in Marketplace
+                3. Install the Markdown plugin by JetBrains
+                4. Restart the IDE
+            """.trimIndent()
+        }
+        previewPanel.removeAll()
+        previewPanel.add(JBScrollPane(messageArea), BorderLayout.CENTER)
+        previewPanel.revalidate()
+        previewPanel.repaint()
+    }
+
+    private fun showJCEFNotSupportedMessage() {
+        val messageArea = JBTextArea().apply {
+            isEditable = false
+            lineWrap = true
+            wrapStyleWord = true
+            text = """
+                Markdown Preview Unavailable
+
+                JCEF (Java Chromium Embedded Framework) is not supported by your current runtime.
+                This is common in Android Studio which uses a JBR without JCEF by default.
+
+                To enable preview in Android Studio:
+                1. Press Cmd+Shift+A (or Ctrl+Shift+A on Windows/Linux)
+                2. Type "Choose Boot Java Runtime for the IDE"
+                3. Select the newest version with "JCEF" in the name
+                4. Restart Android Studio
+
+                Note: IntelliJ IDEA includes JCEF by default and should work without this step.
+            """.trimIndent()
+        }
+        previewPanel.removeAll()
+        previewPanel.add(JBScrollPane(messageArea), BorderLayout.CENTER)
+        previewPanel.revalidate()
+        previewPanel.repaint()
     }
 
     private fun injectGithubAuthorization(newPanel: MarkdownJCEFHtmlPanel) {

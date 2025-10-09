@@ -1,4 +1,4 @@
-package com.github.hungyanbin.intellijpluginpragent.service
+package com.github.hungyanbin.pragent.service
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

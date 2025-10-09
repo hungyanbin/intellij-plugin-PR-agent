@@ -1,9 +1,9 @@
-package com.github.hungyanbin.intellijpluginpragent.services
+package com.github.hungyanbin.pragent.services
 
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
-import com.github.hungyanbin.intellijpluginpragent.MyBundle
+import com.github.hungyanbin.pragent.MyBundle
 
 @Service(Service.Level.PROJECT)
 class MyProjectService(project: Project) {

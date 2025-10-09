@@ -1,7 +1,11 @@
 <!-- Keep a Changelog guide -> https://keepachangelog.com -->
 
-# intellij-plugin-PR-agent Changelog
+# PR-agent Changelog
 
-## [Unreleased]
+## [0.0.1]
 ### Added
-- Initial scaffold created from [IntelliJ Platform Plugin Template](https://github.com/JetBrains/intellij-platform-plugin-template)
+- AI Assistant - Automatically generates concise PR descriptions based on your code changes
+- Markdown Preview - Real-time preview of your PR description with full markdown support (requires Markdown plugin)
+- Mermaid Diagram Generation - Automatically generates class diagrams and sequence diagrams to visualize your changes
+- Interactive Modification - Refine your PR description through conversational text input
+- Configurable Base Prompt - Customize the base prompt to tailor PR descriptions to your team's style and requirements

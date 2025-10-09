@@ -1,12 +1,12 @@
-package com.github.hungyanbin.intellijpluginpragent.toolWindow
+package com.github.hungyanbin.pragent.toolWindow
 
-import com.github.hungyanbin.intellijpluginpragent.repository.SecretRepository
-import com.github.hungyanbin.intellijpluginpragent.service.AgentService
-import com.github.hungyanbin.intellijpluginpragent.service.BranchHistory
-import com.github.hungyanbin.intellijpluginpragent.service.CreatePRRequest
-import com.github.hungyanbin.intellijpluginpragent.service.GitCommandService
-import com.github.hungyanbin.intellijpluginpragent.service.GitHubAPIService
-import com.github.hungyanbin.intellijpluginpragent.service.GitHubRepository
+import com.github.hungyanbin.pragent.repository.SecretRepository
+import com.github.hungyanbin.pragent.service.AgentService
+import com.github.hungyanbin.pragent.service.BranchHistory
+import com.github.hungyanbin.pragent.service.CreatePRRequest
+import com.github.hungyanbin.pragent.service.GitCommandService
+import com.github.hungyanbin.pragent.service.GitHubAPIService
+import com.github.hungyanbin.pragent.service.GitHubRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -16,7 +16,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch

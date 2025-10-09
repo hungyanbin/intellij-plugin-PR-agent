@@ -1,4 +1,4 @@
-package com.github.hungyanbin.intellijpluginpragent.toolWindow
+package com.github.hungyanbin.pragent.toolWindow
 
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
