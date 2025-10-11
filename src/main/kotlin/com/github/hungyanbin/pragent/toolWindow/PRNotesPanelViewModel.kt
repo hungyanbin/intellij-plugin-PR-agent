@@ -7,6 +7,7 @@ import com.github.hungyanbin.pragent.service.CreatePRRequest
 import com.github.hungyanbin.pragent.service.GitCommandService
 import com.github.hungyanbin.pragent.service.GitHubAPIService
 import com.github.hungyanbin.pragent.service.GitHubRepository
+import com.github.hungyanbin.pragent.service.GitStatusWatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,6 +28,7 @@ class PRNotesPanelViewModel(projectBasePath: String) {
     private val secretRepository = SecretRepository()
     private val githubAPIService = GitHubAPIService()
     private val promptTemplateRepository = PromptTemplateRepository()
+    private val gitStatusWatcher = GitStatusWatcher(projectBasePath)
     private var currentBranchHistory: BranchHistory? = null
 
     private val _prNotesText = MutableStateFlow("")
@@ -100,6 +102,23 @@ class PRNotesPanelViewModel(projectBasePath: String) {
     init {
         loadRecentBranches()
         loadBasePrompt()
+        setupGitStatusWatcher()
+    }
+
+    private fun setupGitStatusWatcher() {
+        // Start watching for git changes
+        gitStatusWatcher.startWatching(coroutineScope)
+
+        // Subscribe to git change events
+        coroutineScope.launch {
+            gitStatusWatcher.gitChangeEvents.collect {
+                // Reload branches when git status changes
+                loadRecentBranches()
+
+                // Check for existing PR again in case branch changed
+                checkForExistingPR()
+            }
+        }
     }
 
     fun onBaseBranchSelected(branchName: String?) {
@@ -153,6 +172,7 @@ class PRNotesPanelViewModel(projectBasePath: String) {
     }
 
     fun cleanup() {
+        gitStatusWatcher.stopWatching()
         coroutineScope.cancel()
         githubAPIService.close()
     }
