@@ -1,24 +1,34 @@
 package com.github.hungyanbin.pragent.toolWindow
 
+import com.github.hungyanbin.pragent.domain.LLMProvider
 import com.github.hungyanbin.pragent.repository.SecretRepository
+import com.github.hungyanbin.pragent.service.AgentService
 import com.github.hungyanbin.pragent.utils.runOnUI
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPanel
 import com.intellij.ui.components.JBTextArea
-import com.intellij.ui.components.JBTextField
 import kotlinx.coroutines.*
 import java.awt.BorderLayout
 import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
+import java.awt.Insets
+import java.awt.event.ItemEvent
+import javax.swing.DefaultComboBoxModel
 import javax.swing.JButton
+import javax.swing.JComboBox
 import javax.swing.JPanel
 import javax.swing.JPasswordField
 
 class ConfigPanel : JBPanel<JBPanel<*>>() {
 
-    private val apiKeyField = JPasswordField()
+    // LLM Provider Section
+    private val llmProviderComboBox = JComboBox(LLMProvider.entries.toTypedArray())
+    private val llmApiKeyField = JPasswordField()
+    private val llmModelComboBox = JComboBox<String>()
+
+    // GitHub Section
     private val githubPatField = JPasswordField()
-    private val inputField = JBTextField()
+
     private val resultArea = JBTextArea()
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val secretRepository = SecretRepository()
@@ -26,23 +36,56 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
     init {
         layout = BorderLayout()
 
-        val inputPanel = JPanel(GridBagLayout()).apply {
-            val gbc = GridBagConstraints()
+        val mainPanel = JPanel(GridBagLayout()).apply {
+            val gbc = GridBagConstraints().apply {
+                fill = GridBagConstraints.HORIZONTAL
+                anchor = GridBagConstraints.NORTHWEST
+                insets = Insets(5, 5, 5, 5)
+            }
 
-            // API Key row
-            gbc.gridx = 0; gbc.gridy = 0; gbc.anchor = GridBagConstraints.WEST
-            add(JBLabel("Anthropic API Key:"), gbc)
-            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0
-            add(apiKeyField, gbc)
+            // ============ LLM Provider Section ============
+            gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 3; gbc.weightx = 1.0
+            add(JBLabel("LLM Provider Settings").apply {
+                font = font.deriveFont(font.style or java.awt.Font.BOLD)
+            }, gbc)
 
-            // GitHub PAT row
-            gbc.gridx = 0; gbc.gridy = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0.0
+            // Provider dropdown
+            gbc.gridy = 1; gbc.gridwidth = 1; gbc.weightx = 0.0
+            add(JBLabel("API Provider:"), gbc)
+            gbc.gridx = 1; gbc.gridwidth = 2; gbc.weightx = 1.0
+            add(llmProviderComboBox, gbc)
+
+            // LLM API Key
+            gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 1; gbc.weightx = 0.0
+            add(JBLabel("API Key:"), gbc)
+            gbc.gridx = 1; gbc.gridwidth = 2; gbc.weightx = 1.0
+            add(llmApiKeyField, gbc)
+
+            // Model selection
+            gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 1; gbc.weightx = 0.0
+            add(JBLabel("Model:"), gbc)
+            gbc.gridx = 1; gbc.gridwidth = 2; gbc.weightx = 1.0
+            add(llmModelComboBox, gbc)
+
+            // ============ GitHub PAT Section ============
+            gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 3; gbc.weightx = 1.0
+            gbc.insets = Insets(20, 5, 5, 5) // Extra top margin for section spacing
+            add(JBLabel("GitHub Settings").apply {
+                font = font.deriveFont(font.style or java.awt.Font.BOLD)
+            }, gbc)
+
+            // GitHub PAT
+            gbc.gridy = 5; gbc.gridwidth = 1; gbc.weightx = 0.0
+            gbc.insets = Insets(5, 5, 5, 5) // Reset to normal margin
             add(JBLabel("GitHub PAT:"), gbc)
-            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0
+            gbc.gridx = 1; gbc.gridwidth = 2; gbc.weightx = 1.0
             add(githubPatField, gbc)
 
-            // Apply button (spans both credential rows)
-            gbc.gridx = 2; gbc.gridy = 0; gbc.gridheight = 2; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0.0
+            // ============ Apply Button ============
+            gbc.gridx = 0; gbc.gridy = 6; gbc.gridwidth = 3
+            gbc.insets = Insets(15, 5, 5, 5) // Extra top margin for button
+            gbc.anchor = GridBagConstraints.CENTER
+            gbc.fill = GridBagConstraints.NONE
             add(JButton("Apply").apply {
                 addActionListener { applySettings() }
             }, gbc)
@@ -53,8 +96,13 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
             text = "Results will appear here..."
         }
 
+        add(mainPanel, BorderLayout.NORTH)
 
-        add(inputPanel, BorderLayout.NORTH)
+        // Setup provider change listener
+        setupProviderListener()
+
+        // Initialize with default provider models
+        updateModelOptions(LLMProvider.Anthropic)
 
         // Load saved credentials on initialization
         coroutineScope.launch {
@@ -62,8 +110,28 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
         }
     }
 
+    private fun setupProviderListener() {
+        llmProviderComboBox.addItemListener { event ->
+            if (event.stateChange == ItemEvent.SELECTED) {
+                val selectedProvider = event.item as LLMProvider
+                updateModelOptions(selectedProvider)
+            }
+        }
+    }
+
+    private fun updateModelOptions(provider: LLMProvider) {
+        val models = provider.modelMap.values.toTypedArray()
+
+        llmModelComboBox.model = DefaultComboBoxModel(models)
+        if (models.isNotEmpty()) {
+            llmModelComboBox.selectedIndex = 0
+        }
+    }
+
     private fun applySettings() {
-        val apiKey = String(apiKeyField.password)
+        val llmApiKey = String(llmApiKeyField.password)
+        val llmProvider = llmProviderComboBox.selectedItem as LLMProvider
+        val llmModel = llmModelComboBox.selectedItem as? String
         val githubPat = String(githubPatField.password)
 
         resultArea.text = "Saving credentials..."
@@ -71,9 +139,9 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
         coroutineScope.launch {
             val messages = mutableListOf<String>()
 
-            if (apiKey.isNotEmpty()) {
-                secretRepository.storeAnthropicApiKey(apiKey)
-                messages.add("Anthropic API key saved")
+            if (llmApiKey.isNotEmpty()) {
+                secretRepository.storeAnthropicApiKey(llmApiKey)
+                messages.add("$llmProvider API key saved")
             }
 
             if (githubPat.isNotEmpty()) {
@@ -97,7 +165,7 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
 
         runOnUI {
             if (savedApiKey != null) {
-                apiKeyField.text = savedApiKey
+                llmApiKeyField.text = savedApiKey
             }
 
             if (savedGithubPat != null) {
