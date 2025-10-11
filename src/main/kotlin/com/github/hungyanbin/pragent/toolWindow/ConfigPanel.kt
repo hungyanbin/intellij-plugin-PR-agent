@@ -2,7 +2,6 @@ package com.github.hungyanbin.pragent.toolWindow
 
 import com.github.hungyanbin.pragent.domain.LLMProvider
 import com.github.hungyanbin.pragent.repository.SecretRepository
-import com.github.hungyanbin.pragent.service.AgentService
 import com.github.hungyanbin.pragent.utils.runOnUI
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPanel
@@ -144,6 +143,13 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
                 messages.add("$llmProvider API key saved")
             }
 
+            // Save LLM provider and model (non-sensitive data)
+            secretRepository.storeLLMProvider(llmProvider.name)
+            if (llmModel != null) {
+                secretRepository.storeLLMModel(llmModel)
+                messages.add("LLM provider and model saved")
+            }
+
             if (githubPat.isNotEmpty()) {
                 secretRepository.storeGithubPat(githubPat)
                 messages.add("GitHub PAT saved")
@@ -162,6 +168,8 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
     private suspend fun loadSavedCredentials() {
         val savedApiKey = secretRepository.getAnthropicApiKey()
         val savedGithubPat = secretRepository.getGithubPat()
+        val savedProvider = secretRepository.getLLMProvider()
+        val savedModel = secretRepository.getLLMModel()
 
         runOnUI {
             if (savedApiKey != null) {
@@ -170,6 +178,18 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
 
             if (savedGithubPat != null) {
                 githubPatField.text = savedGithubPat
+            }
+
+            // Restore saved LLM provider
+            if (savedProvider != null) {
+                val provider = LLMProvider.valueOf(savedProvider)
+                llmProviderComboBox.selectedItem = provider
+                updateModelOptions(provider)
+
+                // Restore saved model after updating model options
+                if (savedModel != null) {
+                    llmModelComboBox.selectedItem = savedModel
+                }
             }
         }
     }

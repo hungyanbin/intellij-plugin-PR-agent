@@ -23,9 +23,9 @@ import kotlinx.coroutines.launch
 
 class PRNotesPanelViewModel(projectBasePath: String) {
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private val agentService = AgentService()
-    private val gitCommandService = GitCommandService(projectBasePath)
     private val secretRepository = SecretRepository()
+    private val agentService = AgentService(secretRepository)
+    private val gitCommandService = GitCommandService(projectBasePath)
     private val githubAPIService = GitHubAPIService()
     private val promptTemplateRepository = PromptTemplateRepository()
     private val gitStatusWatcher = GitStatusWatcher(projectBasePath)
