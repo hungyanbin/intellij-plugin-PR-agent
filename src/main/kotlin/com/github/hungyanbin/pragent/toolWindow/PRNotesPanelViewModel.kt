@@ -20,7 +20,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class PRNotesPanelViewModel(private val projectBasePath: String) {
+class PRNotesPanelViewModel(projectBasePath: String) {
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val agentService = AgentService()
     private val gitCommandService = GitCommandService(projectBasePath)
@@ -44,68 +44,44 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
     private val _statusMessage = MutableStateFlow("")
     val statusMessage: StateFlow<String> = _statusMessage.asStateFlow()
 
-    private val _recentBranches = MutableStateFlow<List<String>>(emptyList())
+    private val recentBranches = MutableStateFlow<List<String>>(emptyList())
 
-    val compareBranches: Flow<List<String>> = _recentBranches.map { branches ->
+    val compareBranches: Flow<List<String>> = recentBranches.map { branches ->
         if (branches.isEmpty()) return@map emptyList()
 
         val currentBranch = gitCommandService.getCurrentBranch()
 
-        // Build the list: current branch first, then recent branches (excluding current)
-        val result = mutableListOf<String>()
-
-        // 1. Add current branch first
-        result.add(currentBranch.name)
-
-        // 2. Add recent branches (excluding current branch)
-        branches.forEach { branch ->
-            if (branch != currentBranch.name) {
-                result.add(branch)
+        buildList {
+            add(currentBranch.name)
+            branches.forEach { branch ->
+                if (branch != currentBranch.name) {
+                    add(branch)
+                }
             }
         }
-
-        result
     }.stateIn(coroutineScope, SharingStarted.Eagerly, emptyList())
 
-    val baseBranches: StateFlow<List<String>> = _recentBranches.map { branches ->
+    val baseBranches: StateFlow<List<String>> = recentBranches.map { branches ->
         if (branches.isEmpty()) return@map emptyList()
 
         val currentBranch = gitCommandService.getCurrentBranch()
         val parentBranch = gitCommandService.getParentBranch(currentBranch)
 
-        // Try to get default branch from GitHub
-        var defaultBranchName: String? = null
-        try {
-            val githubPat = secretRepository.getGithubPat()
-            if (!githubPat.isNullOrEmpty()) {
-                val repository = getGithubRepository()
-                if (repository != null) {
-                    defaultBranchName = githubAPIService.getDefaultBranch(githubPat, repository)
+        buildList {
+            val defaultBranchName = getGithubDefaultBranchName()
+            // 1. Add parent branch first
+            add(parentBranch.name)
+            // 2. Add default branch second (if different from parent)
+            if (defaultBranchName != null && defaultBranchName != parentBranch.name) {
+                add(defaultBranchName)
+            }
+            // 3. Add recent branches (excluding parent and default branch)
+            branches.forEach { branch ->
+                if (branch != parentBranch.name && branch != defaultBranchName) {
+                    add(branch)
                 }
             }
-        } catch (e: Exception) {
-            // Ignore errors, will fallback to branches list
         }
-
-        // Build the list: parent branch first, then default branch, then recent branches
-        val result = mutableListOf<String>()
-
-        // 1. Add parent branch first
-        result.add(parentBranch.name)
-
-        // 2. Add default branch second (if different from parent)
-        if (defaultBranchName != null && defaultBranchName != parentBranch.name) {
-            result.add(defaultBranchName)
-        }
-
-        // 3. Add recent branches (excluding parent and default branch)
-        branches.forEach { branch ->
-            if (branch != parentBranch.name && branch != defaultBranchName) {
-                result.add(branch)
-            }
-        }
-
-        result
     }.stateIn(coroutineScope, SharingStarted.Eagerly, emptyList())
 
     private val _selectedBaseBranch = MutableStateFlow<String?>(null)
@@ -121,6 +97,11 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
     private var existingPRNumber: Int? = null
     private var existingPRTitle: String? = null
 
+    init {
+        loadRecentBranches()
+        loadBasePrompt()
+    }
+
     fun onBaseBranchSelected(branchName: String?) {
         _selectedBaseBranch.value = branchName
         checkForExistingPR()
@@ -129,95 +110,6 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
     fun onCompareBranchSelected(branchName: String?) {
         _selectedCompareBranch.value = branchName
         checkForExistingPR()
-    }
-
-    private fun checkForExistingPR() {
-        val baseBranch = _selectedBaseBranch.value
-        val compareBranch = _selectedCompareBranch.value
-
-        // Only check if both branches are selected and different
-        if (baseBranch == null || compareBranch == null || baseBranch == compareBranch) {
-            return
-        }
-
-        coroutineScope.launch {
-            try {
-                val githubPat = secretRepository.getGithubPat()
-                if (githubPat.isNullOrEmpty()) {
-                    // No GitHub PAT configured, skip check
-                    return@launch
-                }
-
-                val repository = getGithubRepository() ?: return@launch
-
-                val existingPR = githubAPIService.findExistingPullRequest(
-                    githubPat,
-                    repository,
-                    compareBranch,
-                    baseBranch
-                )
-
-                if (existingPR != null) {
-                    val prText = buildString {
-                        if (!existingPR.body.isNullOrEmpty()) {
-                            appendLine(existingPR.body)
-                        } else {
-                            appendLine("(No description)")
-                        }
-                    }
-                    _prNotesText.value = prText
-                    existingPRText = prText
-                    existingPRNumber = existingPR.number
-                    existingPRTitle = existingPR.title
-
-                    // If PR is closed, disable both buttons
-                    // If PR is open, keep buttons enabled so user can modify and update
-                    if (existingPR.state == "closed") {
-                        _statusMessage.value = "PR is closed"
-                        _isCreatePRButtonEnabled.value = false
-                        _isGeneratePRButtonEnabled.value = false
-                    } else {
-                        // PR is open, enable buttons for modification
-                        _isGeneratePRButtonEnabled.value = true
-                        _isCreatePRButtonEnabled.value = true
-                        _createPRButtonText.value = "Update PR"
-                        _statusMessage.value = "Find existing PR, click Update button to update existing description"
-                    }
-                } else {
-                    // No existing PR found, show default message and enable Generate button
-                    _statusMessage.value = "Click 'Generate PR Notes' to create pull request notes using AI..."
-                    _prNotesText.value = ""
-                    _isCreatePRButtonEnabled.value = false
-                    _isGeneratePRButtonEnabled.value = true
-                    _createPRButtonText.value = "Create PR"
-                    existingPRText = ""
-                    existingPRNumber = null
-                    existingPRTitle = null
-                }
-            } catch (e: Exception) {
-                // Silently fail - just don't update the text
-            }
-        }
-    }
-
-    init {
-        loadRecentBranches()
-        loadBasePrompt()
-    }
-
-    private fun loadBasePrompt() {
-        _basePromptText.value = promptTemplateRepository.getBasePrompt()
-    }
-
-    private fun loadRecentBranches() {
-        coroutineScope.launch {
-            try {
-                val branches = gitCommandService.getRecentBranches(10)
-                _recentBranches.value = branches
-            } catch (e: Exception) {
-                _recentBranches.value = emptyList()
-            }
-        }
     }
 
     fun onGeneratePRNotesClicked(
@@ -237,6 +129,32 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
                 createPullRequest(currentPRNotes)
             }
         }
+    }
+
+    fun onModifyPRNotesClicked(
+        userPrompt: String,
+        includeClassDiagram: Boolean,
+        includeSequenceDiagram: Boolean
+    ) {
+        coroutineScope.launch {
+            modifyPRNotes(userPrompt, includeClassDiagram, includeSequenceDiagram)
+        }
+    }
+
+    fun onUpdateBasePromptClicked(newBasePrompt: String) {
+        if (newBasePrompt.isBlank()) {
+            _statusMessage.value = "Error: Base prompt cannot be empty"
+            return
+        }
+
+        promptTemplateRepository.updateBasePrompt(newBasePrompt)
+        _basePromptText.value = newBasePrompt
+        _statusMessage.value = "Base prompt updated successfully"
+    }
+
+    fun cleanup() {
+        coroutineScope.cancel()
+        githubAPIService.close()
     }
 
     private suspend fun updatePullRequest(currentPRNotes: String) {
@@ -497,16 +415,6 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
         }
     }
 
-    fun onModifyPRNotesClicked(
-        userPrompt: String,
-        includeClassDiagram: Boolean,
-        includeSequenceDiagram: Boolean
-    ) {
-        coroutineScope.launch {
-            modifyPRNotes(userPrompt, includeClassDiagram, includeSequenceDiagram)
-        }
-    }
-
     private suspend fun modifyPRNotes(
         userPrompt: String,
         includeClassDiagram: Boolean,
@@ -581,18 +489,94 @@ class PRNotesPanelViewModel(private val projectBasePath: String) {
         }
     }
 
-    fun onUpdateBasePromptClicked(newBasePrompt: String) {
-        if (newBasePrompt.isBlank()) {
-            _statusMessage.value = "Error: Base prompt cannot be empty"
+    private fun checkForExistingPR() {
+        val baseBranch = _selectedBaseBranch.value
+        val compareBranch = _selectedCompareBranch.value
+
+        // Only check if both branches are selected and different
+        if (baseBranch == null || compareBranch == null || baseBranch == compareBranch) {
             return
         }
 
-        promptTemplateRepository.updateBasePrompt(newBasePrompt)
-        _basePromptText.value = newBasePrompt
-        _statusMessage.value = "Base prompt updated successfully"
+        coroutineScope.launch {
+            try {
+                val githubPat = secretRepository.getGithubPat()
+                if (githubPat.isNullOrEmpty()) {
+                    // No GitHub PAT configured, skip check
+                    return@launch
+                }
+
+                val repository = getGithubRepository() ?: return@launch
+
+                val existingPR = githubAPIService.findExistingPullRequest(
+                    githubPat,
+                    repository,
+                    compareBranch,
+                    baseBranch
+                )
+
+                if (existingPR != null) {
+                    val prText = buildString {
+                        if (!existingPR.body.isNullOrEmpty()) {
+                            appendLine(existingPR.body)
+                        } else {
+                            appendLine("(No description)")
+                        }
+                    }
+                    _prNotesText.value = prText
+                    existingPRText = prText
+                    existingPRNumber = existingPR.number
+                    existingPRTitle = existingPR.title
+
+                    // If PR is closed, disable both buttons
+                    // If PR is open, keep buttons enabled so user can modify and update
+                    if (existingPR.state == "closed") {
+                        _statusMessage.value = "PR is closed"
+                        _isCreatePRButtonEnabled.value = false
+                        _isGeneratePRButtonEnabled.value = false
+                    } else {
+                        // PR is open, enable buttons for modification
+                        _isGeneratePRButtonEnabled.value = true
+                        _isCreatePRButtonEnabled.value = true
+                        _createPRButtonText.value = "Update PR"
+                        _statusMessage.value = "Find existing PR, click Update button to update existing description"
+                    }
+                } else {
+                    // No existing PR found, show default message and enable Generate button
+                    _statusMessage.value = "Click 'Generate PR Notes' to create pull request notes using AI..."
+                    _prNotesText.value = ""
+                    _isCreatePRButtonEnabled.value = false
+                    _isGeneratePRButtonEnabled.value = true
+                    _createPRButtonText.value = "Create PR"
+                    existingPRText = ""
+                    existingPRNumber = null
+                    existingPRTitle = null
+                }
+            } catch (e: Exception) {
+                // Silently fail - just don't update the text
+            }
+        }
     }
 
-    fun cleanup() {
-        coroutineScope.cancel()
+    private suspend fun getGithubDefaultBranchName(): String? {
+        return try {
+            val githubPat = secretRepository.getGithubPat() ?: return null
+            val repository = getGithubRepository() ?: return null
+
+            githubAPIService.getDefaultBranch(githubPat, repository)
+        } catch (e: Exception) {
+            // Ignore errors, will fallback to branches list
+            null
+        }
+    }
+
+    private fun loadBasePrompt() {
+        _basePromptText.value = promptTemplateRepository.getBasePrompt()
+    }
+
+    private fun loadRecentBranches() {
+        coroutineScope.launch {
+            recentBranches.value = gitCommandService.getRecentBranches(10)
+        }
     }
 }
