@@ -212,7 +212,7 @@ class PRNotesPanelViewModel(projectBasePath: String) {
         includeClassDiagram: Boolean,
         includeSequenceDiagram: Boolean
     ) {
-        val apiKey = secretRepository.getAnthropicApiKey() ?: ""
+        val apiKey = secretRepository.getKeyByCurrentLLMProvider() ?: ""
 
         if (apiKey.isEmpty()) {
             _statusMessage.value = "Error: Please enter and apply your Anthropic API key in the Config tab"
@@ -440,7 +440,7 @@ class PRNotesPanelViewModel(projectBasePath: String) {
         includeClassDiagram: Boolean,
         includeSequenceDiagram: Boolean
     ) {
-        val apiKey = secretRepository.getAnthropicApiKey() ?: ""
+        val apiKey = secretRepository.getKeyByCurrentLLMProvider() ?: ""
 
         if (apiKey.isEmpty()) {
             _statusMessage.value = "Error: Please enter and apply your Anthropic API key in the Config tab"

@@ -114,6 +114,20 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
             if (event.stateChange == ItemEvent.SELECTED) {
                 val selectedProvider = event.item as LLMProvider
                 updateModelOptions(selectedProvider)
+                loadApiKeyForProvider(selectedProvider)
+            }
+        }
+    }
+
+    private fun loadApiKeyForProvider(provider: LLMProvider) {
+        coroutineScope.launch {
+            val apiKey = secretRepository.getKeyByLLMProvider(provider)
+            runOnUI {
+                if (apiKey != null) {
+                    llmApiKeyField.text = apiKey
+                } else {
+                    llmApiKeyField.text = ""
+                }
             }
         }
     }
@@ -139,7 +153,7 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
             val messages = mutableListOf<String>()
 
             if (llmApiKey.isNotEmpty()) {
-                secretRepository.storeAnthropicApiKey(llmApiKey)
+                secretRepository.storeKeyByLLMProvider(llmProvider, llmApiKey)
                 messages.add("$llmProvider API key saved")
             }
 
@@ -166,7 +180,7 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
     }
 
     private suspend fun loadSavedCredentials() {
-        val savedApiKey = secretRepository.getAnthropicApiKey()
+        val savedApiKey = secretRepository.getKeyByCurrentLLMProvider()
         val savedGithubPat = secretRepository.getGithubPat()
         val savedProvider = secretRepository.getLLMProvider()
         val savedModel = secretRepository.getLLMModel()
