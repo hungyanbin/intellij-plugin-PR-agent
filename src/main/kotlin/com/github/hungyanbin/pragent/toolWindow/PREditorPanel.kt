@@ -142,6 +142,8 @@ class PREditorPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
 
         plainTextArea.apply {
             isEditable = true
+            lineWrap = true
+            wrapStyleWord = true
             text = "Click 'Generate PR Notes' to create pull request notes using AI..."
             document.addDocumentListener(object : javax.swing.event.DocumentListener {
                 override fun insertUpdate(e: javax.swing.event.DocumentEvent?) {

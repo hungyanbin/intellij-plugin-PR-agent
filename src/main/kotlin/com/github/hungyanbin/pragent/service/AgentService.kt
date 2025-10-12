@@ -1,13 +1,16 @@
 package com.github.hungyanbin.pragent.service
 
 import ai.koog.agents.core.agent.AIAgent
-import ai.koog.prompt.executor.clients.anthropic.AnthropicModels
 import ai.koog.prompt.executor.llms.all.simpleAnthropicExecutor
+import ai.koog.prompt.llm.LLModel
+import com.github.hungyanbin.pragent.domain.LLMProvider
+import com.github.hungyanbin.pragent.repository.SecretRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class AgentService {
-
+class AgentService(
+    private val secretRepository: SecretRepository
+) {
 
     suspend fun generatePRNotes(apiKey: String, prompt: String): String {
         return withContext(Dispatchers.IO) {
@@ -31,7 +34,7 @@ class AgentService {
                         - Testing checklists or procedural steps
                         - Repeating information already in commit messages
                     """.trimIndent(),
-                    llmModel = AnthropicModels.Sonnet_4
+                    llmModel = getLLMModel()
                 )
 
                 agent.run(prompt)
@@ -39,5 +42,13 @@ class AgentService {
                 "Error generating PR notes: ${e.message}"
             }
         }
+    }
+
+    private fun getLLMModel(): LLModel {
+        val llmProvider = secretRepository.getLLMProvider() ?: throw IllegalStateException("LLMProvider is not set")
+        val currentProvider = LLMProvider.valueOf(llmProvider)
+        val model = secretRepository.getLLMModel() ?: throw IllegalStateException("LLModel is not set")
+        return currentProvider.modelMap.filterValues { modelName -> modelName == model }
+            .keys.first()
     }
 }

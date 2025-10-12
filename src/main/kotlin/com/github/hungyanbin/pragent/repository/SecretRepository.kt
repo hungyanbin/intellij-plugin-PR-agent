@@ -1,7 +1,9 @@
 package com.github.hungyanbin.pragent.repository
 
+import com.github.hungyanbin.pragent.domain.LLMProvider
 import com.intellij.credentialStore.CredentialAttributes
 import com.intellij.ide.passwordSafe.PasswordSafe
+import com.intellij.ide.util.PropertiesComponent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -12,19 +14,78 @@ class SecretRepository {
         "anthropic_api_key"
     )
 
+    private val googleApiKeyAttribute = CredentialAttributes(
+        "google",
+        "google_api_key"
+    )
+
+    private val openaiApiKeyAttribute = CredentialAttributes(
+        "openai",
+        "openai_api_key"
+    )
+
+    private val deepseekApiKeyAttribute = CredentialAttributes(
+        "deepseek",
+        "deepseek_api_key"
+    )
+
+    private val openrouterApiKeyAttribute = CredentialAttributes(
+        "openrouter",
+        "openrouter_api_key"
+    )
+
+    private val ollamaApiKeyAttribute = CredentialAttributes(
+        "ollama",
+        "ollama_api_key"
+    )
+
+    private val bedrockApiKeyAttribute = CredentialAttributes(
+        "bedrock",
+        "bedrock_api_key"
+    )
+
     private val githubPatAttribute = CredentialAttributes(
         "github",
         "github_pat"
     )
 
-    suspend fun storeAnthropicApiKey(apiKey: String) = withContext(Dispatchers.IO) {
-        PasswordSafe.instance.setPassword(anthropicApiKeyAttribute, apiKey)
+    companion object {
+        private const val LLM_PROVIDER_KEY = "com.github.hungyanbin.pragent.llm.provider"
+        private const val LLM_MODEL_KEY = "com.github.hungyanbin.pragent.llm.model"
     }
 
-    suspend fun getAnthropicApiKey(): String? = withContext(Dispatchers.IO) {
+    private fun getCredentialAttributesByProvider(provider: LLMProvider): CredentialAttributes {
+        return when (provider) {
+            LLMProvider.Anthropic -> anthropicApiKeyAttribute
+            LLMProvider.Google -> googleApiKeyAttribute
+            LLMProvider.OpenAI -> openaiApiKeyAttribute
+            LLMProvider.DeepSeek -> deepseekApiKeyAttribute
+            LLMProvider.OpenRouter -> openrouterApiKeyAttribute
+            LLMProvider.Ollama -> ollamaApiKeyAttribute
+            LLMProvider.Bedrock -> bedrockApiKeyAttribute
+        }
+    }
+
+    suspend fun storeKeyByLLMProvider(provider: LLMProvider, apiKey: String) = withContext(Dispatchers.IO) {
+        val credentialAttributes = getCredentialAttributesByProvider(provider)
+        PasswordSafe.instance.setPassword(credentialAttributes, apiKey)
+    }
+
+    suspend fun getKeyByCurrentLLMProvider(): String? = withContext(Dispatchers.IO) {
+        val providerName = getLLMProvider() ?: return@withContext null
+        val provider = try {
+            LLMProvider.valueOf(providerName)
+        } catch (e: IllegalArgumentException) {
+            return@withContext null
+        }
+
+        return@withContext getKeyByLLMProvider(provider)
+    }
+
+    suspend fun getKeyByLLMProvider(provider: LLMProvider): String? = withContext(Dispatchers.IO) {
+        val credentialAttributes = getCredentialAttributesByProvider(provider)
         return@withContext try {
-            val result = PasswordSafe.instance.getPassword(anthropicApiKeyAttribute)
-            result
+            PasswordSafe.instance.getPassword(credentialAttributes)
         } catch (e: Exception) {
             e.printStackTrace()
             null
@@ -47,5 +108,23 @@ class SecretRepository {
 
     suspend fun clearGithubPat() = withContext(Dispatchers.IO) {
         PasswordSafe.instance.setPassword(githubPatAttribute, null)
+    }
+
+    // Store and retrieve LLM provider name (non-sensitive)
+    fun storeLLMProvider(providerName: String) {
+        PropertiesComponent.getInstance().setValue(LLM_PROVIDER_KEY, providerName)
+    }
+
+    fun getLLMProvider(): String? {
+        return PropertiesComponent.getInstance().getValue(LLM_PROVIDER_KEY)
+    }
+
+    // Store and retrieve LLM model name (non-sensitive)
+    fun storeLLMModel(modelName: String) {
+        PropertiesComponent.getInstance().setValue(LLM_MODEL_KEY, modelName)
+    }
+
+    fun getLLMModel(): String? {
+        return PropertiesComponent.getInstance().getValue(LLM_MODEL_KEY)
     }
 }
