@@ -21,7 +21,9 @@ import javax.swing.JPasswordField
 class ConfigPanel : JBPanel<JBPanel<*>>() {
 
     // LLM Provider Section
-    private val llmProviderComboBox = JComboBox(LLMProvider.entries.toTypedArray())
+    private val llmProviderComboBox = JComboBox(arrayOf(
+        LLMProvider.Anthropic, LLMProvider.Google, LLMProvider.OpenAI, LLMProvider.OpenRouter, LLMProvider.Ollama
+    ))
     private val llmApiKeyField = JPasswordField()
     private val llmModelComboBox = JComboBox<String>()
 

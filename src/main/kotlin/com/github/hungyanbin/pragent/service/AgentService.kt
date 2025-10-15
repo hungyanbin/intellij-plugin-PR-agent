@@ -2,6 +2,10 @@ package com.github.hungyanbin.pragent.service
 
 import ai.koog.agents.core.agent.AIAgent
 import ai.koog.prompt.executor.llms.all.simpleAnthropicExecutor
+import ai.koog.prompt.executor.llms.all.simpleGoogleAIExecutor
+import ai.koog.prompt.executor.llms.all.simpleOllamaAIExecutor
+import ai.koog.prompt.executor.llms.all.simpleOpenAIExecutor
+import ai.koog.prompt.executor.llms.all.simpleOpenRouterExecutor
 import ai.koog.prompt.llm.LLModel
 import com.github.hungyanbin.pragent.domain.LLMProvider
 import com.github.hungyanbin.pragent.repository.SecretRepository
@@ -16,7 +20,7 @@ class AgentService(
         return withContext(Dispatchers.IO) {
             try {
                 val agent = AIAgent(
-                    promptExecutor = simpleAnthropicExecutor(apiKey),
+                    promptExecutor = getPromptExecutor(apiKey),
                     systemPrompt = """
                         You are an expert code reviewer and technical writer specializing in creating clear,
                         concise pull request descriptions. Your goal is to help developers quickly understand
@@ -44,9 +48,23 @@ class AgentService(
         }
     }
 
-    private fun getLLMModel(): LLModel {
+    private fun getPromptExecutor(apiKey: String) = when (getCurrentProvider()) {
+        LLMProvider.Anthropic -> simpleAnthropicExecutor(apiKey)
+        LLMProvider.Google -> simpleGoogleAIExecutor(apiKey)
+        LLMProvider.OpenAI -> simpleOpenAIExecutor(apiKey)
+        LLMProvider.OpenRouter -> simpleOpenRouterExecutor(apiKey)
+        LLMProvider.Ollama -> simpleOllamaAIExecutor()
+        LLMProvider.DeepSeek -> throw UnsupportedOperationException("DeepSeek provider is not yet supported")
+        LLMProvider.Bedrock -> throw UnsupportedOperationException("Bedrock provider is not yet supported")
+    }
+
+    private fun getCurrentProvider(): LLMProvider {
         val llmProvider = secretRepository.getLLMProvider() ?: throw IllegalStateException("LLMProvider is not set")
-        val currentProvider = LLMProvider.valueOf(llmProvider)
+        return LLMProvider.valueOf(llmProvider)
+    }
+
+    private fun getLLMModel(): LLModel {
+        val currentProvider = getCurrentProvider()
         val model = secretRepository.getLLMModel() ?: throw IllegalStateException("LLModel is not set")
         return currentProvider.modelMap.filterValues { modelName -> modelName == model }
             .keys.first()
