@@ -188,6 +188,9 @@ class PREditorPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
         tabbedPane.addTab("Preview", previewPanel)
         tabbedPane.addTab("Base Prompt", basePromptPanel)
 
+        // Initialize preview panel with appropriate message
+        initializePreviewPanel()
+
         // Create center panel with status label and tabbed pane
         val centerPanel = JBPanel<JBPanel<*>>().apply {
             layout = BorderLayout()
@@ -329,17 +332,18 @@ class PREditorPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
         }
     }
 
+    private fun initializePreviewPanel() {
+        // Show appropriate message on initialization based on available features
+        if (!isMarkdownPluginAvailable() || !JBCefApp.isSupported()) {
+            showMarkdownPluginNotAvailableMessage()
+        }
+    }
+
     private fun updateMarkdownPreview(markdownText: String) {
         try {
             // Check if markdown plugin is available
             if (!isMarkdownPluginAvailable()) {
                 showMarkdownPluginNotAvailableMessage()
-                return
-            }
-
-            // Check if JCEF is supported
-            if (!JBCefApp.isSupported()) {
-                showJCEFNotSupportedMessage()
                 return
             }
 
@@ -372,7 +376,8 @@ class PREditorPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
         return try {
             Class.forName("org.intellij.plugins.markdown.ui.preview.jcef.MarkdownJCEFHtmlPanel")
             true
-        } catch (e: ClassNotFoundException) {
+        } catch (e: Throwable) {
+            println("[PREditorPanel] Markdown plugin not found: ${e.message}")
             false
         }
     }
@@ -388,36 +393,10 @@ class PREditorPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
                 The Markdown plugin is not installed or enabled.
 
                 To enable preview:
-                1. Go to Settings → Plugins
-                2. Search for "Markdown" in Marketplace
-                3. Install the Markdown plugin by JetBrains
-                4. Restart the IDE
-            """.trimIndent()
-        }
-        previewPanel.removeAll()
-        previewPanel.add(JBScrollPane(messageArea), BorderLayout.CENTER)
-        previewPanel.revalidate()
-        previewPanel.repaint()
-    }
-
-    private fun showJCEFNotSupportedMessage() {
-        val messageArea = JBTextArea().apply {
-            isEditable = false
-            lineWrap = true
-            wrapStyleWord = true
-            text = """
-                Markdown Preview Unavailable
-
-                JCEF (Java Chromium Embedded Framework) is not supported by your current runtime.
-                This is common in Android Studio which uses a JBR without JCEF by default.
-
-                To enable preview in Android Studio:
-                1. Press Cmd+Shift+A (or Ctrl+Shift+A on Windows/Linux)
+                1. Help → Find Action (or Cmd+Shift+A on macOS)
                 2. Type "Choose Boot Java Runtime for the IDE"
-                3. Select the newest version with "JCEF" in the name
-                4. Restart Android Studio
-
-                Note: IntelliJ IDEA includes JCEF by default and should work without this step.
+                3. Select the newest version with JCEF in the name
+                4. Restart IDE
             """.trimIndent()
         }
         previewPanel.removeAll()
