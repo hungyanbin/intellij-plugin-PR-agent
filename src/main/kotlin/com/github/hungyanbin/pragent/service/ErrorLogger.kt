@@ -10,6 +10,16 @@ import java.io.StringWriter
 import kotlin.collections.emptyList
 
 /**
+ * Listener interface for error log changes.
+ */
+interface ErrorLogListener {
+    /**
+     * Called when the error log list changes (errors added or cleared).
+     */
+    fun onErrorLogsChanged()
+}
+
+/**
  * Application-level service for logging and persisting errors.
  *
  * This service wraps IntelliJ's Logger and provides persistent storage
@@ -29,6 +39,7 @@ import kotlin.collections.emptyList
 class ErrorLogger : SerializablePersistentStateComponent<ErrorLoggerState>(ErrorLoggerState()) {
 
     private val logger = Logger.getInstance(ErrorLogger::class.java)
+    private val listeners = mutableListOf<ErrorLogListener>()
 
     companion object {
         private const val MAX_ERROR_LOGS = 100
@@ -39,6 +50,24 @@ class ErrorLogger : SerializablePersistentStateComponent<ErrorLoggerState>(Error
         fun getInstance(): ErrorLogger {
             return com.intellij.openapi.application.ApplicationManager.getApplication()
                 .getService(ErrorLogger::class.java)
+        }
+    }
+
+    /**
+     * Adds a listener to be notified when error logs change.
+     */
+    fun addListener(listener: ErrorLogListener) {
+        synchronized(listeners) {
+            listeners.add(listener)
+        }
+    }
+
+    /**
+     * Removes a previously registered listener.
+     */
+    fun removeListener(listener: ErrorLogListener) {
+        synchronized(listeners) {
+            listeners.remove(listener)
         }
     }
 
@@ -82,6 +111,9 @@ class ErrorLogger : SerializablePersistentStateComponent<ErrorLoggerState>(Error
             }
             currentState.copy(errorLogs = newLogs)
         }
+
+        // Notify listeners
+        notifyListeners()
     }
 
     /**
@@ -112,6 +144,22 @@ class ErrorLogger : SerializablePersistentStateComponent<ErrorLoggerState>(Error
     fun clearAllLogs() {
         updateState { it.copy(errorLogs = emptyList()) }
         logger.info("All error logs cleared")
+        notifyListeners()
+    }
+
+    /**
+     * Notifies all registered listeners that error logs have changed.
+     */
+    private fun notifyListeners() {
+        synchronized(listeners) {
+            listeners.toList() // Create a copy to avoid concurrent modification
+        }.forEach { listener ->
+            try {
+                listener.onErrorLogsChanged()
+            } catch (e: Exception) {
+                logger.error("Error notifying listener", e)
+            }
+        }
     }
 
     private fun buildLogMessage(message: String, context: String?): String {

@@ -1,6 +1,7 @@
 package com.github.hungyanbin.pragent.toolWindow
 
 import com.github.hungyanbin.pragent.repository.SecretRepository
+import com.github.hungyanbin.pragent.service.ErrorLogger
 import com.github.hungyanbin.pragent.utils.runOnUI
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
