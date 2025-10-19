@@ -1,6 +1,7 @@
 package com.github.hungyanbin.pragent.repository
 
 import com.github.hungyanbin.pragent.domain.LLMProvider
+import com.github.hungyanbin.pragent.service.ErrorLogger
 import com.intellij.credentialStore.CredentialAttributes
 import com.intellij.ide.passwordSafe.PasswordSafe
 import com.intellij.ide.util.PropertiesComponent
@@ -75,7 +76,8 @@ class SecretRepository {
         val providerName = getLLMProvider() ?: return@withContext null
         val provider = try {
             LLMProvider.valueOf(providerName)
-        } catch (e: IllegalArgumentException) {
+        } catch (e: Throwable) {
+            ErrorLogger.getInstance().logError("Failed to getLLMProvider ${e.message}", e)
             return@withContext null
         }
 
@@ -87,7 +89,7 @@ class SecretRepository {
         return@withContext try {
             PasswordSafe.instance.getPassword(credentialAttributes)
         } catch (e: Exception) {
-            e.printStackTrace()
+            ErrorLogger.getInstance().logError("Failed to get key ${e.message}", e)
             null
         }
     }
@@ -101,7 +103,7 @@ class SecretRepository {
             val result = PasswordSafe.instance.getPassword(githubPatAttribute)
             result
         } catch (e: Exception) {
-            e.printStackTrace()
+            ErrorLogger.getInstance().logError("Failed to getGithubPat ${e.message}", e)
             null
         }
     }
