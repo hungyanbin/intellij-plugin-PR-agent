@@ -2,6 +2,7 @@ package com.github.hungyanbin.pragent.toolWindow
 
 import com.github.hungyanbin.pragent.domain.LLMProvider
 import com.github.hungyanbin.pragent.repository.SecretRepository
+import com.github.hungyanbin.pragent.service.ErrorLogger
 import com.github.hungyanbin.pragent.utils.runOnUI
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPanel

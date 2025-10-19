@@ -1,6 +1,7 @@
 package com.github.hungyanbin.pragent.toolWindow
 
 import com.github.hungyanbin.pragent.repository.SecretRepository
+import com.github.hungyanbin.pragent.service.ErrorLogger
 import com.github.hungyanbin.pragent.utils.runOnUI
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
@@ -362,6 +363,7 @@ class PREditorPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
             val html = MarkdownUtil.generateMarkdownHtml(virtualFile, markdownText, project)
             markdownPreviewPanel?.setHtml(html, 0)
         } catch (e: Exception) {
+            ErrorLogger.getInstance().logError("Failed to update markdown preview ${e.message}", e)
             // Fallback to plain text if markdown rendering fails
             val errorArea = JBTextArea("Failed to render markdown preview: ${e.message}")
             errorArea.isEditable = false
@@ -377,7 +379,7 @@ class PREditorPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
             Class.forName("org.intellij.plugins.markdown.ui.preview.jcef.MarkdownJCEFHtmlPanel")
             true
         } catch (e: Throwable) {
-            println("[PREditorPanel] Markdown plugin not found: ${e.message}")
+            ErrorLogger.getInstance().logError("[PREditorPanel] Markdown plugin not found: ${e.message}", e)
             false
         }
     }
@@ -446,8 +448,7 @@ class PREditorPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
                 }
             }, jcefBrowser.cefBrowser)
         } catch (e: Exception) {
-            // Silently fail if we can't access the browser - preview will still work without auth
-            println("Failed to add request handler: ${e.stackTraceToString()}")
+            ErrorLogger.getInstance().logError("Failed to add request handler: ${e.message}", e)
         }
     }
 

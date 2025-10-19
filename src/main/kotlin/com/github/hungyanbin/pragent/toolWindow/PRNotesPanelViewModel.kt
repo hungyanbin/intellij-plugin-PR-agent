@@ -4,6 +4,7 @@ import com.github.hungyanbin.pragent.repository.SecretRepository
 import com.github.hungyanbin.pragent.service.AgentService
 import com.github.hungyanbin.pragent.service.BranchHistory
 import com.github.hungyanbin.pragent.service.CreatePRRequest
+import com.github.hungyanbin.pragent.service.ErrorLogger
 import com.github.hungyanbin.pragent.service.GitCommandService
 import com.github.hungyanbin.pragent.service.GitHubAPIService
 import com.github.hungyanbin.pragent.service.GitHubRepository
@@ -51,39 +52,50 @@ class PRNotesPanelViewModel(projectBasePath: String) {
     val compareBranches: Flow<List<String>> = recentBranches.map { branches ->
         if (branches.isEmpty()) return@map emptyList()
 
-        val currentBranch = gitCommandService.getCurrentBranch()
+        runCatching {
+            val currentBranch = gitCommandService.getCurrentBranch().getOrThrow()
 
-        buildList {
-            add(currentBranch.name)
-            branches.forEach { branch ->
-                if (branch != currentBranch.name) {
-                    add(branch)
+            buildList {
+                add(currentBranch.name)
+                branches.forEach { branch ->
+                    if (branch != currentBranch.name) {
+                        add(branch)
+                    }
                 }
             }
+        }.getOrElse { t ->
+            ErrorLogger.getInstance().logError("Failed to build compareBranches: ${t.message}", t)
+            emptyList()
         }
     }.stateIn(coroutineScope, SharingStarted.Eagerly, emptyList())
 
     val baseBranches: StateFlow<List<String>> = recentBranches.map { branches ->
         if (branches.isEmpty()) return@map emptyList()
 
-        val currentBranch = gitCommandService.getCurrentBranch()
-        val parentBranch = gitCommandService.getParentBranch(currentBranch)
+        runCatching {
+            val currentBranch = gitCommandService.getCurrentBranch().getOrThrow()
+            val parentBranch = gitCommandService.getParentBranch(currentBranch).getOrThrow()
 
-        buildList {
-            val defaultBranchName = getGithubDefaultBranchName()
-            // 1. Add parent branch first
-            add(parentBranch.name)
-            // 2. Add default branch second (if different from parent)
-            if (defaultBranchName != null && defaultBranchName != parentBranch.name) {
-                add(defaultBranchName)
-            }
-            // 3. Add recent branches (excluding parent and default branch)
-            branches.forEach { branch ->
-                if (branch != parentBranch.name && branch != defaultBranchName) {
-                    add(branch)
+            buildList {
+                val defaultBranchName = getGithubDefaultBranchName()
+                // 1. Add parent branch first
+                add(parentBranch.name)
+                // 2. Add default branch second (if different from parent)
+                if (defaultBranchName != null && defaultBranchName != parentBranch.name) {
+                    add(defaultBranchName)
+                }
+                // 3. Add recent branches (excluding parent and default branch)
+                branches.forEach { branch ->
+                    if (branch != parentBranch.name && branch != defaultBranchName) {
+                        add(branch)
+                    }
                 }
             }
+        }.getOrElse { t ->
+            ErrorLogger.getInstance().logError("Failed to build baseBranches: ${t.message}", t)
+            emptyList()
         }
+
     }.stateIn(coroutineScope, SharingStarted.Eagerly, emptyList())
 
     private val _selectedBaseBranch = MutableStateFlow<String?>(null)
@@ -203,7 +215,9 @@ class PRNotesPanelViewModel(projectBasePath: String) {
             _statusMessage.value = "✅ Pull request updated successfully!"
             _isCreatePRButtonEnabled.value = true
         } catch (e: Exception) {
-            _statusMessage.value = "Error updating pull request: ${e.message}"
+            val errorMessage = "Error updating pull request: ${e.message}"
+            ErrorLogger.getInstance().logError(errorMessage, e)
+            _statusMessage.value = errorMessage
             _isCreatePRButtonEnabled.value = true
         }
     }
@@ -242,7 +256,7 @@ class PRNotesPanelViewModel(projectBasePath: String) {
             }
 
             // Check if base branch is behind remote and pull if necessary
-            if (gitCommandService.isLocalBranchBehindRemote(baseBranchName)) {
+            if (gitCommandService.isLocalBranchBehindRemote(baseBranchName).getOrThrow()) {
                 _statusMessage.value = "Base branch '$baseBranchName' is behind remote. Pulling latest changes..."
                 if (!gitCommandService.pullBranch(baseBranchName)) {
                     _statusMessage.value = "Error: Failed to pull base branch '$baseBranchName'. The branch may have diverged from remote. Please update it manually with 'git pull origin $baseBranchName' and try again."
@@ -251,17 +265,17 @@ class PRNotesPanelViewModel(projectBasePath: String) {
             }
 
             // Get branch info for selected branches
-            val baseBranch = gitCommandService.getBranchByName(baseBranchName)
-            val compareBranch = gitCommandService.getBranchByName(compareBranchName)
+            val baseBranch = gitCommandService.getBranchByName(baseBranchName).getOrThrow()
+            val compareBranch = gitCommandService.getBranchByName(compareBranchName).getOrThrow()
 
             // Validate that compare branch is ahead of base branch
-            if (!gitCommandService.isBranchAheadOf(compareBranchName, baseBranchName)) {
+            if (!gitCommandService.isBranchAheadOf(compareBranchName, baseBranchName).getOrThrow()) {
                 _statusMessage.value = "Error: Compare branch '$compareBranchName' is not ahead of base branch '$baseBranchName'. Please check your branch selection."
                 return
             }
 
             // Get commits between branches
-            val commits = gitCommandService.getCommitsSinceParent(compareBranch, baseBranch)
+            val commits = gitCommandService.getCommitsSinceParent(compareBranch, baseBranch).getOrThrow()
 
             val branchHistory = BranchHistory(
                 commits = commits,
@@ -272,7 +286,7 @@ class PRNotesPanelViewModel(projectBasePath: String) {
             val fileDiff = gitCommandService.getFileDiff(
                 baseBranch.hash,
                 compareBranch.hash
-            )
+            ).getOrThrow()
 
             val prPrompt = buildPRPrompt(branchHistory, fileDiff, includeClassDiagram, includeSequenceDiagram)
             val response = agentService.generatePRNotes(apiKey, prPrompt)
@@ -282,7 +296,9 @@ class PRNotesPanelViewModel(projectBasePath: String) {
             _statusMessage.value = "PR notes generated successfully"
             currentBranchHistory = branchHistory
         } catch (e: Exception) {
-            _statusMessage.value = "Error generating PR notes: ${e.message}"
+            val errorMessage = "Error generating PR notes: ${e.message}"
+            ErrorLogger.getInstance().logError(errorMessage, e)
+            _statusMessage.value = errorMessage
         }
     }
 
@@ -338,13 +354,17 @@ class PRNotesPanelViewModel(projectBasePath: String) {
             _statusMessage.value = "✅ Pull request created successfully!"
             _isCreatePRButtonEnabled.value = true
         } catch (e: Exception) {
-            _statusMessage.value = "Error creating pull request: ${e.message}"
+            val errorMessage = "Error creating pull request: ${e.message}"
+            ErrorLogger.getInstance().logError(errorMessage, e)
+            _statusMessage.value = errorMessage
             _isCreatePRButtonEnabled.value = true
         }
     }
 
     private suspend fun getGithubRepository(): GitHubRepository? {
-        val remoteUrl = gitCommandService.getRemoteUrl()
+        val remoteUrl = gitCommandService.getRemoteUrl().onFailure { t ->
+            ErrorLogger.getInstance().logError("failed to get remote url", t)
+        }.getOrNull()
         if (remoteUrl == null) {
             _statusMessage.value = "Error: Could not determine GitHub repository from git remote"
             _isCreatePRButtonEnabled.value = true
@@ -465,9 +485,9 @@ class PRNotesPanelViewModel(projectBasePath: String) {
                     return
                 }
 
-                val baseBranch = gitCommandService.getBranchByName(baseBranchName)
-                val compareBranch = gitCommandService.getBranchByName(compareBranchName)
-                val commits = gitCommandService.getCommitsSinceParent(compareBranch, baseBranch)
+                val baseBranch = gitCommandService.getBranchByName(baseBranchName).getOrThrow()
+                val compareBranch = gitCommandService.getBranchByName(compareBranchName).getOrThrow()
+                val commits = gitCommandService.getCommitsSinceParent(compareBranch, baseBranch).getOrThrow()
 
                 BranchHistory(
                     commits = commits,
@@ -481,7 +501,7 @@ class PRNotesPanelViewModel(projectBasePath: String) {
             val fileDiff = gitCommandService.getFileDiff(
                 branchHistory.parentBranch.hash,
                 branchHistory.currentBranch.hash
-            )
+            ).getOrThrow()
 
             val basePRPrompt = buildPRPrompt(branchHistory, fileDiff, includeClassDiagram, includeSequenceDiagram)
             val currentPRContent = _prNotesText.value
@@ -505,7 +525,9 @@ class PRNotesPanelViewModel(projectBasePath: String) {
             _prNotesText.value = response
             _statusMessage.value = "PR notes modified successfully"
         } catch (e: Exception) {
-            _statusMessage.value = "Error modifying PR notes: ${e.message}"
+            val errorMessage = "Error modifying PR notes: ${e.message}"
+            ErrorLogger.getInstance().logError(errorMessage, e)
+            _statusMessage.value = errorMessage
         }
     }
 
@@ -573,7 +595,7 @@ class PRNotesPanelViewModel(projectBasePath: String) {
                     existingPRTitle = null
                 }
             } catch (e: Exception) {
-                // Silently fail - just don't update the text
+                ErrorLogger.getInstance().logError("Failed to check Existing PR: ${e.message}", e)
             }
         }
     }
@@ -585,6 +607,7 @@ class PRNotesPanelViewModel(projectBasePath: String) {
 
             githubAPIService.getDefaultBranch(githubPat, repository)
         } catch (e: Exception) {
+            ErrorLogger.getInstance().logError("failed to get default branch ${e.message}", e)
             // Ignore errors, will fallback to branches list
             null
         }
@@ -597,6 +620,8 @@ class PRNotesPanelViewModel(projectBasePath: String) {
     private fun loadRecentBranches() {
         coroutineScope.launch {
             recentBranches.value = gitCommandService.getRecentBranches(10)
+                .onFailure { t -> ErrorLogger.getInstance().logError("failed to loadRecentBranches", t) }
+                .getOrElse { emptyList() }
         }
     }
 }

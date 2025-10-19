@@ -71,6 +71,7 @@ class GitStatusWatcher(private val projectBasePath: String) {
                     // Poll every 2 seconds
                     delay(2000)
                 } catch (e: Exception) {
+                    ErrorLogger.getInstance().logError("failed to watch git status: ${e.message}", e)
                     // Ignore errors and continue watching
                 }
             }

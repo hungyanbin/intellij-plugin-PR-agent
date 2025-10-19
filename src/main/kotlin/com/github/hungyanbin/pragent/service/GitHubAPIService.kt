@@ -54,20 +54,16 @@ class GitHubAPIService {
         repository: GitHubRepository,
         prRequest: CreatePRRequest
     ): String = withContext(Dispatchers.IO) {
-        try {
-            val response = client.post("https://api.github.com/repos/${repository.owner}/${repository.name}/pulls") {
-                headers {
-                    append(HttpHeaders.Authorization, "token $githubPat")
-                    append(HttpHeaders.Accept, "application/vnd.github.v3+json")
-                }
-                contentType(ContentType.Application.Json)
-                setBody(prRequest)
+        val response = client.post("https://api.github.com/repos/${repository.owner}/${repository.name}/pulls") {
+            headers {
+                append(HttpHeaders.Authorization, "token $githubPat")
+                append(HttpHeaders.Accept, "application/vnd.github.v3+json")
             }
-
-            return@withContext response.body<String>()
-        } catch (e: Exception) {
-            throw Exception("Failed to create PR: ${e.message}", e)
+            contentType(ContentType.Application.Json)
+            setBody(prRequest)
         }
+
+        response.body<String>()
     }
 
     fun parseGitHubRepository(remoteUrl: String): GitHubRepository? {
@@ -110,6 +106,7 @@ class GitHubAPIService {
             val pullRequests = response.body<List<PullRequest>>()
             return@withContext pullRequests.firstOrNull()
         } catch (e: Exception) {
+            ErrorLogger.getInstance().logError("Can not find existing PR: ${e.message}", e)
             // Return null on any error
             return@withContext null
         }
@@ -122,42 +119,34 @@ class GitHubAPIService {
         title: String,
         body: String
     ): String = withContext(Dispatchers.IO) {
-        try {
-            val response = client.patch("https://api.github.com/repos/${repository.owner}/${repository.name}/pulls/$prNumber") {
-                headers {
-                    append(HttpHeaders.Authorization, "token $githubPat")
-                    append(HttpHeaders.Accept, "application/vnd.github.v3+json")
-                }
-                contentType(ContentType.Application.Json)
-                setBody(mapOf(
-                    "title" to title,
-                    "body" to body
-                ))
+        val response = client.patch("https://api.github.com/repos/${repository.owner}/${repository.name}/pulls/$prNumber") {
+            headers {
+                append(HttpHeaders.Authorization, "token $githubPat")
+                append(HttpHeaders.Accept, "application/vnd.github.v3+json")
             }
-
-            return@withContext response.body<String>()
-        } catch (e: Exception) {
-            throw Exception("Failed to update PR: ${e.message}", e)
+            contentType(ContentType.Application.Json)
+            setBody(mapOf(
+                "title" to title,
+                "body" to body
+            ))
         }
+
+        response.body<String>()
     }
 
     suspend fun getDefaultBranch(
         githubPat: String,
         repository: GitHubRepository
     ): String = withContext(Dispatchers.IO) {
-        try {
-            val response = client.get("https://api.github.com/repos/${repository.owner}/${repository.name}") {
-                headers {
-                    append(HttpHeaders.Authorization, "token $githubPat")
-                    append(HttpHeaders.Accept, "application/vnd.github.v3+json")
-                }
+        val response = client.get("https://api.github.com/repos/${repository.owner}/${repository.name}") {
+            headers {
+                append(HttpHeaders.Authorization, "token $githubPat")
+                append(HttpHeaders.Accept, "application/vnd.github.v3+json")
             }
-
-            val repoInfo = response.body<RepositoryInfo>()
-            return@withContext repoInfo.default_branch
-        } catch (e: Exception) {
-            throw Exception("Failed to get default branch: ${e.message}", e)
         }
+
+        val repoInfo = response.body<RepositoryInfo>()
+        return@withContext repoInfo.default_branch
     }
 
     fun close() {

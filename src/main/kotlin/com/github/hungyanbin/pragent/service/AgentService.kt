@@ -43,7 +43,9 @@ class AgentService(
 
                 agent.run(prompt)
             } catch (e: Exception) {
-                "Error generating PR notes: ${e.message}"
+                val errorMessage = "Error generating PR notes: ${e.message}"
+                ErrorLogger.getInstance().logError(errorMessage, e)
+                errorMessage
             }
         }
     }
