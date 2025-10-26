@@ -1,9 +1,15 @@
 package com.github.hungyanbin.pragent.toolWindow
 
+import com.github.hungyanbin.pragent.repository.SecretRepository
 import com.github.hungyanbin.pragent.service.BranchHistory
+import com.github.hungyanbin.pragent.utils.PRTemplateUtils
+import com.intellij.openapi.project.Project
 import java.io.File
 
-class PromptTemplateRepository {
+class PromptTemplateRepository(
+    private val project: Project,
+    private val secretRepository: SecretRepository
+) {
     private val storageFile = File(System.getProperty("user.home"), ".intellij-pr-agent/base-prompt.txt")
 
     init {
@@ -22,6 +28,39 @@ class PromptTemplateRepository {
             ""
         }
 
+        // Fetch PR template if enabled
+        val prTemplateSection = if (secretRepository.getIncludePRTemplate()) {
+            val template = PRTemplateUtils.findAndReadPRTemplate(project)
+            if (template != null) {
+                """
+
+                ## CRITICAL REQUIREMENT: PR Description Format
+                Your PR description MUST strictly follow this template structure.
+                Preserve ALL sections, headings, and markdown formatting exactly as shown.
+                Fill in the content for each section based on the code changes.
+
+                **PR TEMPLATE TO FOLLOW (Use this exact structure, do NOT wrap your output in code fences):**
+
+                $template
+
+                **Instructions:**
+                - Output the PR description directly in markdown format
+                - Do NOT wrap your output in ```markdown or any code fences
+                - Keep all markdown headers (##, ###, etc.) exactly as shown in the template
+                - Keep all checkboxes [ ] as shown in the template
+                - Fill in content under each section based on the code changes
+                - Do not add or remove sections from the template
+                - Maintain the exact order of sections as in the template
+                - Start your response directly with the first line of the PR description
+
+                """.trimIndent()
+            } else {
+                ""
+            }
+        } else {
+            ""
+        }
+
         return """
             Please generate comprehensive pull request notes based on the following git information:
 
@@ -35,7 +74,7 @@ class PromptTemplateRepository {
             ```
 
             ${getBasePrompt()}
-
+            $prTemplateSection
         """.trimIndent()
     }
 
