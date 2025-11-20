@@ -39,6 +39,11 @@ data class RepositoryInfo(
     val default_branch: String
 )
 
+@Serializable
+data class GitHubUser(
+    val login: String
+)
+
 class GitHubAPIService {
     private val client = HttpClient(CIO) {
         install(ContentNegotiation) {
@@ -53,7 +58,7 @@ class GitHubAPIService {
         githubPat: String,
         repository: GitHubRepository,
         prRequest: CreatePRRequest
-    ): String = withContext(Dispatchers.IO) {
+    ): PullRequest = withContext(Dispatchers.IO) {
         val response = client.post("https://api.github.com/repos/${repository.owner}/${repository.name}/pulls") {
             headers {
                 append(HttpHeaders.Authorization, "token $githubPat")
@@ -63,7 +68,7 @@ class GitHubAPIService {
             setBody(prRequest)
         }
 
-        response.body<String>()
+        response.body<PullRequest>()
     }
 
     fun parseGitHubRepository(remoteUrl: String): GitHubRepository? {
@@ -134,6 +139,24 @@ class GitHubAPIService {
         response.body<String>()
     }
 
+    suspend fun addAssigneesToPullRequest(
+        githubPat: String,
+        repository: GitHubRepository,
+        issueNumber: Int,
+        assignees: List<String>
+    ): String = withContext(Dispatchers.IO) {
+        val response = client.post("https://api.github.com/repos/${repository.owner}/${repository.name}/issues/$issueNumber/assignees") {
+            headers {
+                append(HttpHeaders.Authorization, "token $githubPat")
+                append(HttpHeaders.Accept, "application/vnd.github.v3+json")
+            }
+            contentType(ContentType.Application.Json)
+            setBody(mapOf("assignees" to assignees))
+        }
+
+        response.body<String>()
+    }
+
     suspend fun getDefaultBranch(
         githubPat: String,
         repository: GitHubRepository
@@ -147,6 +170,22 @@ class GitHubAPIService {
 
         val repoInfo = response.body<RepositoryInfo>()
         return@withContext repoInfo.default_branch
+    }
+
+    suspend fun getAuthenticatedUser(githubPat: String): GitHubUser? = withContext(Dispatchers.IO) {
+        try {
+            val response = client.get("https://api.github.com/user") {
+                headers {
+                    append(HttpHeaders.Authorization, "token $githubPat")
+                    append(HttpHeaders.Accept, "application/vnd.github.v3+json")
+                }
+            }
+
+            return@withContext response.body<GitHubUser>()
+        } catch (e: Exception) {
+            ErrorLogger.getInstance().logError("Failed to get authenticated user: ${e.message}", e)
+            return@withContext null
+        }
     }
 
     fun close() {

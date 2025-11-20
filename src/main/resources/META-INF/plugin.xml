@@ -31,5 +31,6 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow factoryClass="com.github.hungyanbin.pragent.toolWindow.PRAgentWindowFactory" id="PR agent" icon="META-INF/pluginIcon.svg"/>
+        <postStartupActivity implementation="com.github.hungyanbin.pragent.startup.PRAgentStartupActivity"/>
     </extensions>
 </idea-plugin>

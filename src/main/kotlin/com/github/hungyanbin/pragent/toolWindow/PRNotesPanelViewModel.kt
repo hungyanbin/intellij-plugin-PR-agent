@@ -1,6 +1,7 @@
 package com.github.hungyanbin.pragent.toolWindow
 
 import com.github.hungyanbin.pragent.repository.SecretRepository
+import com.github.hungyanbin.pragent.repository.UserRepository
 import com.github.hungyanbin.pragent.service.AgentService
 import com.github.hungyanbin.pragent.service.BranchHistory
 import com.github.hungyanbin.pragent.service.CreatePRRequest
@@ -28,6 +29,7 @@ class PRNotesPanelViewModel(projectBasePath: String) {
     private val agentService = AgentService(secretRepository)
     private val gitCommandService = GitCommandService(projectBasePath)
     private val githubAPIService = GitHubAPIService()
+    private val userRepository = UserRepository.getInstance()
     private val promptTemplateRepository = PromptTemplateRepository()
     private val gitStatusWatcher = GitStatusWatcher(projectBasePath)
     private var currentBranchHistory: BranchHistory? = null
@@ -214,6 +216,7 @@ class PRNotesPanelViewModel(projectBasePath: String) {
             val repository = getGithubRepository() ?: return
 
             githubAPIService.updatePullRequest(githubPat, repository, prNumber, title, currentPRNotes)
+            addAssigneeToPR(githubPat, repository, prNumber)
 
             _statusMessage.value = "✅ Pull request updated successfully!"
             _isCreatePRButtonEnabled.value = true
@@ -222,6 +225,27 @@ class PRNotesPanelViewModel(projectBasePath: String) {
             ErrorLogger.getInstance().logError(errorMessage, e)
             _statusMessage.value = errorMessage
             _isCreatePRButtonEnabled.value = true
+        }
+    }
+
+    private suspend fun addAssigneeToPR(
+        githubPat: String,
+        repository: GitHubRepository,
+        prNumber: Int
+    ) {
+        val authenticatedUser = userRepository.getAuthenticatedUser(githubPat)
+        if (authenticatedUser != null) {
+            try {
+                githubAPIService.addAssigneesToPullRequest(
+                    githubPat,
+                    repository,
+                    prNumber,
+                    listOf(authenticatedUser.login)
+                )
+            } catch (e: Exception) {
+                ErrorLogger.getInstance().logError("Failed to add assignee: ${e.message}", e)
+                // Don't fail the whole operation if assignee fails
+            }
         }
     }
 
@@ -357,7 +381,8 @@ class PRNotesPanelViewModel(projectBasePath: String) {
                 body = prNotes
             )
 
-            githubAPIService.createPullRequest(githubPat, repository, prRequest)
+            val createdPR = githubAPIService.createPullRequest(githubPat, repository, prRequest)
+            addAssigneeToPR(githubPat, repository, createdPR.number)
 
             _statusMessage.value = "✅ Pull request created successfully!"
             _isCreatePRButtonEnabled.value = true
