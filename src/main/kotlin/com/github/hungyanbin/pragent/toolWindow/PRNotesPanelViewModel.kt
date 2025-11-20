@@ -35,6 +35,9 @@ class PRNotesPanelViewModel(projectBasePath: String) {
     private val _prNotesText = MutableStateFlow("")
     val prNotesText: StateFlow<String> = _prNotesText.asStateFlow()
 
+    private val _prNoteTitle = MutableStateFlow("")
+    val prNoteTitle = _prNoteTitle.asStateFlow()
+
     private val _isCreatePRButtonEnabled = MutableStateFlow(false)
     val isCreatePRButtonEnabled: StateFlow<Boolean> = _isCreatePRButtonEnabled.asStateFlow()
 
@@ -109,7 +112,7 @@ class PRNotesPanelViewModel(projectBasePath: String) {
 
     private var existingPRText = ""
     private var existingPRNumber: Int? = null
-    private var existingPRTitle: String? = null
+//    private var existingPRTitle: String? = null
 
     init {
         loadRecentBranches()
@@ -191,7 +194,7 @@ class PRNotesPanelViewModel(projectBasePath: String) {
 
     private suspend fun updatePullRequest(currentPRNotes: String) {
         val prNumber = existingPRNumber ?: return
-        val title = existingPRTitle ?: return
+        val title = prNoteTitle.value
         val githubPat = secretRepository.getGithubPat()
 
         if (githubPat.isNullOrEmpty()) {
@@ -292,6 +295,12 @@ class PRNotesPanelViewModel(projectBasePath: String) {
             val response = agentService.generatePRNotes(apiKey, prPrompt)
 
             _prNotesText.value = response
+
+            // Generate PR title based on the PR notes
+            _statusMessage.value = "Generating PR title..."
+            val title = agentService.generatePRTitle(apiKey, response)
+            _prNoteTitle.value = title
+
             _isCreatePRButtonEnabled.value = true
             _statusMessage.value = "PR notes generated successfully"
             currentBranchHistory = branchHistory
@@ -339,8 +348,7 @@ class PRNotesPanelViewModel(projectBasePath: String) {
 
             val repository = getGithubRepository() ?: return
 
-            // Extract title from PR notes (first line or first heading)
-            val title = extractTitleFromPRNotes(prNotes, branchHistory.currentBranch.name)
+            val title = prNoteTitle.value
 
             val prRequest = CreatePRRequest(
                 title = title,
@@ -406,32 +414,6 @@ class PRNotesPanelViewModel(projectBasePath: String) {
             }
         }
         return false
-    }
-
-    private fun extractTitleFromPRNotes(prNotes: String, fallbackBranch: String): String {
-        val lines = prNotes.split("\n")
-
-        // Look for the first heading (# or ##)
-        for (line in lines) {
-            val trimmed = line.trim()
-            if (trimmed.startsWith("# ")) {
-                return trimmed.substring(2).trim()
-            }
-            if (trimmed.startsWith("## ")) {
-                return trimmed.substring(3).trim()
-            }
-        }
-
-        // Look for the first non-empty line
-        for (line in lines) {
-            val trimmed = line.trim()
-            if (trimmed.isNotEmpty() && !trimmed.startsWith("```")) {
-                return trimmed.take(100) // Limit title length
-            }
-        }
-
-        // Fallback to branch name
-        return fallbackBranch.replace("_", " ").replace("-", " ")
     }
 
     private fun buildPRPrompt(
@@ -568,7 +550,7 @@ class PRNotesPanelViewModel(projectBasePath: String) {
                     _prNotesText.value = prText
                     existingPRText = prText
                     existingPRNumber = existingPR.number
-                    existingPRTitle = existingPR.title
+                    _prNoteTitle.value = existingPR.title
 
                     // If PR is closed, disable both buttons
                     // If PR is open, keep buttons enabled so user can modify and update
@@ -592,7 +574,6 @@ class PRNotesPanelViewModel(projectBasePath: String) {
                     _createPRButtonText.value = "Create PR"
                     existingPRText = ""
                     existingPRNumber = null
-                    existingPRTitle = null
                 }
             } catch (e: Exception) {
                 ErrorLogger.getInstance().logError("Failed to check Existing PR: ${e.message}", e)
