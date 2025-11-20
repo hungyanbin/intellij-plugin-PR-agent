@@ -9,7 +9,6 @@ import com.github.hungyanbin.pragent.service.GitCommandService
 import com.github.hungyanbin.pragent.service.GitHubAPIService
 import com.github.hungyanbin.pragent.service.GitHubRepository
 import com.github.hungyanbin.pragent.service.GitStatusWatcher
-import com.intellij.openapi.project.Project
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -23,14 +22,14 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class PRNotesPanelViewModel(private val project: Project) {
+class PRNotesPanelViewModel(projectBasePath: String) {
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val secretRepository = SecretRepository()
     private val agentService = AgentService(secretRepository)
-    private val gitCommandService = GitCommandService(project.basePath!!)
+    private val gitCommandService = GitCommandService(projectBasePath)
     private val githubAPIService = GitHubAPIService()
-    private val promptTemplateRepository = PromptTemplateRepository(project, secretRepository)
-    private val gitStatusWatcher = GitStatusWatcher(project.basePath!!)
+    private val promptTemplateRepository = PromptTemplateRepository()
+    private val gitStatusWatcher = GitStatusWatcher(projectBasePath)
     private var currentBranchHistory: BranchHistory? = null
 
     private val _prNotesText = MutableStateFlow("")

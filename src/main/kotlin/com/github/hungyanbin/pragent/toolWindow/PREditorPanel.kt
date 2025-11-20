@@ -53,7 +53,7 @@ class PREditorPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
         border = javax.swing.BorderFactory.createEmptyBorder(5, 5, 5, 5)
     }
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private val viewModel = PRNotesPanelViewModel(project)
+    private val viewModel = PRNotesPanelViewModel(project.basePath!!)
     private val secretRepository = SecretRepository()
     private var createPRButton: JButton
     private var generateButton: JButton

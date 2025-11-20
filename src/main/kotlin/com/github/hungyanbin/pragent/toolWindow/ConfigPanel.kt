@@ -15,7 +15,6 @@ import java.awt.Insets
 import java.awt.event.ItemEvent
 import javax.swing.DefaultComboBoxModel
 import javax.swing.JButton
-import javax.swing.JCheckBox
 import javax.swing.JComboBox
 import javax.swing.JPanel
 import javax.swing.JPasswordField
@@ -31,7 +30,6 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
 
     // GitHub Section
     private val githubPatField = JPasswordField()
-    private val includePRTemplateCheckbox = JCheckBox("Include pull_request_template.md")
 
     private val resultArea = JBTextArea()
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -85,12 +83,8 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
             gbc.gridx = 1; gbc.gridwidth = 2; gbc.weightx = 1.0
             add(githubPatField, gbc)
 
-            // Include PR Template Checkbox
-            gbc.gridx = 0; gbc.gridy = 6; gbc.gridwidth = 3; gbc.weightx = 1.0
-            add(includePRTemplateCheckbox, gbc)
-
             // ============ Apply Button ============
-            gbc.gridx = 0; gbc.gridy = 7; gbc.gridwidth = 3
+            gbc.gridx = 0; gbc.gridy = 6; gbc.gridwidth = 3
             gbc.insets = Insets(15, 5, 5, 5) // Extra top margin for button
             gbc.anchor = GridBagConstraints.CENTER
             gbc.fill = GridBagConstraints.NONE
@@ -178,10 +172,6 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
                 messages.add("GitHub PAT saved")
             }
 
-            // Save include PR template setting
-            secretRepository.storeIncludePRTemplate(includePRTemplateCheckbox.isSelected)
-            messages.add("GitHub settings saved")
-
             runOnUI {
                 if (messages.isNotEmpty()) {
                     resultArea.text = messages.joinToString(", ") + " successfully!"
@@ -197,7 +187,6 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
         val savedGithubPat = secretRepository.getGithubPat()
         val savedProvider = secretRepository.getLLMProvider()
         val savedModel = secretRepository.getLLMModel()
-        val savedIncludePRTemplate = secretRepository.getIncludePRTemplate()
 
         runOnUI {
             if (savedApiKey != null) {
@@ -219,9 +208,6 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
                     llmModelComboBox.selectedItem = savedModel
                 }
             }
-
-            // Restore include PR template checkbox state
-            includePRTemplateCheckbox.isSelected = savedIncludePRTemplate
         }
     }
 
