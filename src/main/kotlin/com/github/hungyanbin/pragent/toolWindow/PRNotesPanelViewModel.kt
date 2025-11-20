@@ -9,7 +9,6 @@ import com.github.hungyanbin.pragent.service.GitCommandService
 import com.github.hungyanbin.pragent.service.GitHubAPIService
 import com.github.hungyanbin.pragent.service.GitHubRepository
 import com.github.hungyanbin.pragent.service.GitStatusWatcher
-import com.intellij.openapi.project.Project
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -23,18 +22,21 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class PRNotesPanelViewModel(private val project: Project) {
+class PRNotesPanelViewModel(projectBasePath: String) {
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val secretRepository = SecretRepository()
     private val agentService = AgentService(secretRepository)
-    private val gitCommandService = GitCommandService(project.basePath!!)
+    private val gitCommandService = GitCommandService(projectBasePath)
     private val githubAPIService = GitHubAPIService()
-    private val promptTemplateRepository = PromptTemplateRepository(project, secretRepository)
-    private val gitStatusWatcher = GitStatusWatcher(project.basePath!!)
+    private val promptTemplateRepository = PromptTemplateRepository()
+    private val gitStatusWatcher = GitStatusWatcher(projectBasePath)
     private var currentBranchHistory: BranchHistory? = null
 
     private val _prNotesText = MutableStateFlow("")
     val prNotesText: StateFlow<String> = _prNotesText.asStateFlow()
+
+    private val _prNoteTitle = MutableStateFlow("")
+    val prNoteTitle = _prNoteTitle.asStateFlow()
 
     private val _isCreatePRButtonEnabled = MutableStateFlow(false)
     val isCreatePRButtonEnabled: StateFlow<Boolean> = _isCreatePRButtonEnabled.asStateFlow()
@@ -110,7 +112,7 @@ class PRNotesPanelViewModel(private val project: Project) {
 
     private var existingPRText = ""
     private var existingPRNumber: Int? = null
-    private var existingPRTitle: String? = null
+//    private var existingPRTitle: String? = null
 
     init {
         loadRecentBranches()
@@ -192,7 +194,7 @@ class PRNotesPanelViewModel(private val project: Project) {
 
     private suspend fun updatePullRequest(currentPRNotes: String) {
         val prNumber = existingPRNumber ?: return
-        val title = existingPRTitle ?: return
+        val title = prNoteTitle.value
         val githubPat = secretRepository.getGithubPat()
 
         if (githubPat.isNullOrEmpty()) {
@@ -293,6 +295,12 @@ class PRNotesPanelViewModel(private val project: Project) {
             val response = agentService.generatePRNotes(apiKey, prPrompt)
 
             _prNotesText.value = response
+
+            // Generate PR title based on the PR notes
+            _statusMessage.value = "Generating PR title..."
+            val title = agentService.generatePRTitle(apiKey, response)
+            _prNoteTitle.value = title
+
             _isCreatePRButtonEnabled.value = true
             _statusMessage.value = "PR notes generated successfully"
             currentBranchHistory = branchHistory
@@ -340,8 +348,7 @@ class PRNotesPanelViewModel(private val project: Project) {
 
             val repository = getGithubRepository() ?: return
 
-            // Extract title from PR notes (first line or first heading)
-            val title = extractTitleFromPRNotes(prNotes, branchHistory.currentBranch.name)
+            val title = prNoteTitle.value
 
             val prRequest = CreatePRRequest(
                 title = title,
@@ -407,32 +414,6 @@ class PRNotesPanelViewModel(private val project: Project) {
             }
         }
         return false
-    }
-
-    private fun extractTitleFromPRNotes(prNotes: String, fallbackBranch: String): String {
-        val lines = prNotes.split("\n")
-
-        // Look for the first heading (# or ##)
-        for (line in lines) {
-            val trimmed = line.trim()
-            if (trimmed.startsWith("# ")) {
-                return trimmed.substring(2).trim()
-            }
-            if (trimmed.startsWith("## ")) {
-                return trimmed.substring(3).trim()
-            }
-        }
-
-        // Look for the first non-empty line
-        for (line in lines) {
-            val trimmed = line.trim()
-            if (trimmed.isNotEmpty() && !trimmed.startsWith("```")) {
-                return trimmed.take(100) // Limit title length
-            }
-        }
-
-        // Fallback to branch name
-        return fallbackBranch.replace("_", " ").replace("-", " ")
     }
 
     private fun buildPRPrompt(
@@ -569,7 +550,7 @@ class PRNotesPanelViewModel(private val project: Project) {
                     _prNotesText.value = prText
                     existingPRText = prText
                     existingPRNumber = existingPR.number
-                    existingPRTitle = existingPR.title
+                    _prNoteTitle.value = existingPR.title
 
                     // If PR is closed, disable both buttons
                     // If PR is open, keep buttons enabled so user can modify and update
@@ -593,7 +574,6 @@ class PRNotesPanelViewModel(private val project: Project) {
                     _createPRButtonText.value = "Create PR"
                     existingPRText = ""
                     existingPRNumber = null
-                    existingPRTitle = null
                 }
             } catch (e: Exception) {
                 ErrorLogger.getInstance().logError("Failed to check Existing PR: ${e.message}", e)

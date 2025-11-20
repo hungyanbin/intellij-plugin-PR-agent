@@ -50,6 +50,47 @@ class AgentService(
         }
     }
 
+    suspend fun generatePRTitle(apiKey: String, prNote: String): String {
+        return withContext(Dispatchers.IO) {
+            try {
+                val agent = AIAgent(
+                    promptExecutor = getPromptExecutor(apiKey),
+                    systemPrompt = """
+                        You are an expert at creating concise, informative pull request titles.
+                        Your goal is to summarize the main purpose of code changes in a single clear sentence.
+
+                        Focus on:
+                        - Being concise (under 100 characters)
+                        - Using action verbs (Add, Fix, Update, Refactor, etc.)
+                        - Highlighting the key feature or change
+                        - Being specific and informative
+
+                        Avoid:
+                        - Being too verbose or detailed
+                        - Including unnecessary punctuation or formatting
+                        - Starting with "PR:" or similar prefixes
+                        - Using markdown or special characters
+                    """.trimIndent(),
+                    llmModel = getLLMModel()
+                )
+
+                val prompt = """
+                    Based on the following pull request description, generate a concise title (under 100 characters).
+                    Only respond with the title text, nothing else.
+
+                    Pull Request Description:
+                    $prNote
+                """.trimIndent()
+
+                agent.run(prompt)
+            } catch (e: Exception) {
+                val errorMessage = "Error generating PR title: ${e.message}"
+                ErrorLogger.getInstance().logError(errorMessage, e)
+                ""
+            }
+        }
+    }
+
     private fun getPromptExecutor(apiKey: String) = when (getCurrentProvider()) {
         LLMProvider.Anthropic -> simpleAnthropicExecutor(apiKey)
         LLMProvider.Google -> simpleGoogleAIExecutor(apiKey)

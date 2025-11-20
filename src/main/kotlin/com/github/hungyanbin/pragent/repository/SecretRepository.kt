@@ -53,7 +53,6 @@ class SecretRepository {
     companion object {
         private const val LLM_PROVIDER_KEY = "com.github.hungyanbin.pragent.llm.provider"
         private const val LLM_MODEL_KEY = "com.github.hungyanbin.pragent.llm.model"
-        private const val INCLUDE_PR_TEMPLATE_KEY = "com.github.hungyanbin.pragent.github.include_pr_template"
     }
 
     private fun getCredentialAttributesByProvider(provider: LLMProvider): CredentialAttributes {
@@ -129,14 +128,5 @@ class SecretRepository {
 
     fun getLLMModel(): String? {
         return PropertiesComponent.getInstance().getValue(LLM_MODEL_KEY)
-    }
-
-    // Store and retrieve include PR template setting (non-sensitive)
-    fun storeIncludePRTemplate(include: Boolean) {
-        PropertiesComponent.getInstance().setValue(INCLUDE_PR_TEMPLATE_KEY, include)
-    }
-
-    fun getIncludePRTemplate(): Boolean {
-        return PropertiesComponent.getInstance().getBoolean(INCLUDE_PR_TEMPLATE_KEY, true)
     }
 }

@@ -34,6 +34,7 @@ import javax.swing.JCheckBox
 import javax.swing.JComboBox
 import javax.swing.JLabel
 import javax.swing.JPanel
+import javax.swing.JTextField
 
 class PREditorPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
 
@@ -53,7 +54,7 @@ class PREditorPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
         border = javax.swing.BorderFactory.createEmptyBorder(5, 5, 5, 5)
     }
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private val viewModel = PRNotesPanelViewModel(project)
+    private val viewModel = PRNotesPanelViewModel(project.basePath!!)
     private val secretRepository = SecretRepository()
     private var createPRButton: JButton
     private var generateButton: JButton
@@ -69,6 +70,9 @@ class PREditorPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
     }
     private val classDiagramCheckBox = JCheckBox("Class Diagram")
     private val sequenceDiagramCheckBox = JCheckBox("Sequence Diagram")
+    private val titleTextField = JTextField().apply {
+        text = ""
+    }
 
     init {
         layout = BorderLayout()
@@ -139,6 +143,19 @@ class PREditorPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
                 add(generateButton)
                 add(createPRButton)
             }, gbc)
+
+            // Title field - Row 4
+            gbc.gridx = 0
+            gbc.gridy = 4
+            gbc.gridwidth = 1
+            gbc.weightx = 0.0
+            gbc.fill = GridBagConstraints.HORIZONTAL
+            gbc.anchor = GridBagConstraints.WEST
+            add(JLabel("Title:"), gbc)
+
+            gbc.gridx = 1
+            gbc.weightx = 1.0
+            add(titleTextField, gbc)
         }
 
         plainTextArea.apply {
@@ -294,6 +311,14 @@ class PREditorPanel(private val project: Project) : JBPanel<JBPanel<*>>() {
                 runOnUI {
                     plainTextArea.text = markdownText
                     updateMarkdownPreview(markdownText)
+                }
+            }
+        }
+
+        coroutineScope.launch {
+            viewModel.prNoteTitle.collect { title ->
+                runOnUI {
+                    titleTextField.text = title
                 }
             }
         }
