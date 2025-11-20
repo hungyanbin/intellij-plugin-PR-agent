@@ -2,6 +2,7 @@ package com.github.hungyanbin.pragent.toolWindow
 
 import com.github.hungyanbin.pragent.domain.LLMProvider
 import com.github.hungyanbin.pragent.repository.SecretRepository
+import com.github.hungyanbin.pragent.repository.UserRepository
 import com.github.hungyanbin.pragent.service.ErrorLogger
 import com.github.hungyanbin.pragent.utils.runOnUI
 import com.intellij.ui.components.JBLabel
@@ -169,6 +170,11 @@ class ConfigPanel : JBPanel<JBPanel<*>>() {
 
             if (githubPat.isNotEmpty()) {
                 secretRepository.storeGithubPat(githubPat)
+                // Clear cached user when PAT is updated
+                val userRepository = UserRepository.getInstance()
+                userRepository.clearCache()
+                // Pre-fetch new authenticated user with the new PAT
+                userRepository.getAuthenticatedUser(githubPat)
                 messages.add("GitHub PAT saved")
             }
 
