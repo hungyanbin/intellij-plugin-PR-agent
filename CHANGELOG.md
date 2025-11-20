@@ -32,4 +32,11 @@
 ### Fixed
 - Multi-Provider Execution - Fixed critical issue where non-Anthropic LLM providers (OpenAI, Google, Ollama) failed to execute prompts due to hardcoded Anthropic executor
 
+## [0.0.4]
+### Added
+- Config Panel - Add include pull_request_template.md check box to let the output to match the project's PR template format
+- PR Editor Panel - Add PR title generation
+- Set current github user as the assignee of the PR
 
+### Fixed
+- Deprecated API usage - fix it by remove unused class
